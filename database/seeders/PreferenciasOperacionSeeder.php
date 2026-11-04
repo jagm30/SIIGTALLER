@@ -23,6 +23,7 @@ class PreferenciasOperacionSeeder extends Seeder
         ['precios', 'precios_incluyen_iva', 'bool', '1', 'Los precios se capturan con IVA incluido y el IVA no se desglosa.'],
         ['precios', 'iva_porcentaje', 'decimal', '16.00', 'Solo para calcular el IVA contenido en reportes internos.'],
         ['precios', 'tarifa_hora_default', 'decimal', null, 'Tarifa sugerida al crear un servicio con cobro por hora.'],
+        ['trabajos', 'mecanicos_registran_horas', 'bool', '1', 'Los mecánicos registran sus horas en cada trabajo. En cobro por hora, la suma de esas horas es lo que se cobra; si se desactiva, se cobran las horas que se capturan al agregar el trabajo.'],
         ['recepcion', 'recepcion_firma_obligatoria', 'bool', '1', 'Sin firma no se completa la recepción.'],
         ['recepcion', 'recepcion_fotos_obligatorias', 'bool', '1', 'Exige las fotos de los ángulos marcados como obligatorios.'],
         ['recepcion', 'recepcion_foto_por_danio', 'bool', '1', 'Cada daño registrado debe tener al menos una foto.'],

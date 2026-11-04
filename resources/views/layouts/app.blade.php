@@ -39,6 +39,9 @@
     @if (session('ok'))
         <div class="aviso exito">{{ session('ok') }}</div>
     @endif
+    @if (session('aviso'))
+        <div class="aviso alerta">{{ session('aviso') }}</div>
+    @endif
     @if (session('error'))
         <div class="aviso error">{{ session('error') }}</div>
     @endif

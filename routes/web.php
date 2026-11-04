@@ -80,6 +80,9 @@ Route::middleware('auth')->group(function () {
     // Catálogos (solo administrador)
     Route::middleware('can:catalogos.gestionar')->group(function () {
         Route::resource('servicios', ServicioController::class)->except('show')->parameters(['servicios' => 'servicio']);
+        // Refacciones que lleva cada servicio (se sugieren al agregarlo a una orden)
+        Route::post('/servicios/{servicio}/refacciones', [ServicioController::class, 'agregarRefaccion'])->name('servicios.refacciones.store');
+        Route::delete('/servicios/{servicio}/refacciones/{refaccion}', [ServicioController::class, 'quitarRefaccion'])->name('servicios.refacciones.destroy');
         Route::resource('refacciones', RefaccionController::class)->except('show')->parameters(['refacciones' => 'refaccion']);
 
         Route::get('/marcas', [MarcaController::class, 'index'])->name('marcas.index');

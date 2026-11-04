@@ -109,4 +109,67 @@ class PreciosTest extends TestCase
 
         $this->assertEquals(800.00, OrdenServicio::find($orden->id)->total);
     }
+
+    public function test_descuento_en_porcentaje_se_recalcula_al_cambiar_la_orden(): void
+    {
+        $recepcion = $this->usuario(Rol::Recepcionista);
+        $orden = $this->ordenEnReparacion($recepcion, $this->usuario(Rol::Mecanico));
+        $orden->trabajos()->create(['servicio_id' => $this->servicio(['precio' => 1000])->id]);
+        $orden->recalcularTotales();
+
+        $this->actingAs($recepcion)->patch(route('ordenes.update', $orden), ['descuento_tipo' => 'porcentaje', 'descuento' => 10])->assertSessionHas('ok');
+        $orden->refresh();
+        $this->assertEquals(100.00, $orden->descuento);
+        $this->assertEquals(900.00, $orden->total);
+        $this->get(route('ordenes.show', $orden))->assertSee('(10 %)');
+
+        // Se agrega otro trabajo: el 10 % sigue aplicando sobre el nuevo subtotal
+        $orden->trabajos()->create(['servicio_id' => $this->servicio(['nombre' => 'Frenos', 'precio' => 500])->id]);
+        $orden->recalcularTotales();
+        $this->assertEquals(150.00, $orden->fresh()->descuento);
+        $this->assertEquals(1350.00, $orden->fresh()->total);
+
+        // Cambiar a cantidad fija deja de usar el porcentaje
+        $this->patch(route('ordenes.update', $orden), ['descuento_tipo' => 'monto', 'descuento' => 200]);
+        $orden->refresh();
+        $this->assertNull($orden->descuento_porcentaje);
+        $this->assertEquals(1300.00, $orden->total);
+    }
+
+    public function test_el_porcentaje_de_descuento_no_pasa_de_100(): void
+    {
+        $recepcion = $this->usuario(Rol::Recepcionista);
+        $orden = $this->ordenEnReparacion($recepcion, $this->usuario(Rol::Mecanico));
+
+        $this->actingAs($recepcion)->patch(route('ordenes.update', $orden), ['descuento_tipo' => 'porcentaje', 'descuento' => 150])
+            ->assertSessionHasErrors('descuento');
+        // En pesos sí se acepta más de 100
+        $this->patch(route('ordenes.update', $orden), ['descuento_tipo' => 'monto', 'descuento' => 150])->assertSessionHasNoErrors();
+    }
+
+    public function test_el_administrador_completa_el_precio_de_lo_que_capturo_el_mecanico(): void
+    {
+        $admin = $this->usuario(Rol::Administrador);
+        $mecanico = $this->usuario(Rol::Mecanico);
+        $orden = $this->ordenEnReparacion($this->usuario(Rol::Recepcionista), $mecanico);
+
+        // El mecánico no ve precios: la pieza y el trabajo fuera de catálogo quedan sin precio
+        $this->actingAs($mecanico)->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => 'otra', 'descripcion' => 'Tornillo especial', 'cantidad' => 2]);
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => 'otro', 'descripcion' => 'Soldadura de escape']);
+        $pieza = $orden->refacciones()->firstOrFail();
+        $trabajo = $orden->trabajos()->firstOrFail();
+        $this->assertNull($pieza->precio_unitario);
+
+        // Y no puede ponérselo después
+        $this->patch(route('refacciones-usadas.precio', $pieza), ['precio_unitario' => 1])->assertForbidden();
+
+        // El administrador ve el campo "Falta precio" y lo completa
+        $this->actingAs($admin)->get(route('ordenes.show', $orden))->assertSee('Falta precio');
+        $this->patch(route('refacciones-usadas.precio', $pieza), ['precio_unitario' => 35])->assertSessionHas('ok');
+        $this->patch(route('trabajos.precio', $trabajo), ['precio_unitario' => 400])->assertSessionHas('ok');
+
+        $this->assertEquals(70.00, $pieza->fresh()->importe);
+        $this->assertEquals(470.00, $orden->fresh()->total);
+        $this->get(route('ordenes.show', $orden))->assertDontSee('Falta precio');
+    }
 }

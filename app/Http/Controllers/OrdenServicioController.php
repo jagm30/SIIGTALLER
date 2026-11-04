@@ -6,6 +6,7 @@ use App\Enums\EstadoOrden;
 use App\Enums\Rol;
 use App\Enums\TipoOrden;
 use App\Models\OrdenServicio;
+use App\Models\PreferenciaOperacion;
 use App\Models\Refaccion;
 use App\Models\Servicio;
 use App\Models\Sucursal;
@@ -102,15 +103,18 @@ class OrdenServicioController extends Controller
             'recepcion.realizadaPor', 'recepcion.fotos.anguloFoto', 'recepcion.danios',
             'entrega.realizadaPor', 'entrega.fotos.anguloFoto', 'entrega.danios',
             'trabajos.mecanicos', 'trabajos.servicio',
-            'refacciones',
+            'refacciones.trabajo',
             'bitacoraEstados.usuario',
         ]);
 
         return view('ordenes.show', [
             'orden' => $orden,
             'mecanicos' => User::activos()->conRol(Rol::Mecanico)->orderBy('name')->get(),
-            'servicios' => Servicio::activos()->get(),
+            // Con el conteo de sugeridas, la vista sabe si mostrar la casilla de "agregar refacciones".
+            'servicios' => Servicio::activos()->withCount('refaccionesSugeridas')->get(),
             'refaccionesCatalogo' => Refaccion::activas()->get(),
+            // Si está apagado en Preferencias, los mecánicos no capturan horas en sus trabajos.
+            'registraHoras' => PreferenciaOperacion::bool('mecanicos_registran_horas', $orden->sucursal_id, true),
         ]);
     }
 
@@ -129,8 +133,10 @@ class OrdenServicioController extends Controller
             'diagnostico' => ['nullable', 'string', 'max:5000'],
             'observaciones' => ['nullable', 'string', 'max:5000'],
             'fecha_promesa' => ['nullable', 'date'],
-            'descuento' => ['nullable', 'numeric', 'min:0'],
-        ]);
+            // El descuento puede ser una cantidad en pesos o un porcentaje del subtotal.
+            'descuento_tipo' => ['nullable', Rule::in(['monto', 'porcentaje'])],
+            'descuento' => ['nullable', 'numeric', 'min:0', Rule::when($request->input('descuento_tipo') === 'porcentaje', ['max:100'])],
+        ], ['descuento.max' => 'El descuento en porcentaje no puede ser mayor a 100.']);
 
         // Cada rol solo cambia lo que le corresponde.
         if ($user->esMecanico()) {
@@ -138,6 +144,17 @@ class OrdenServicioController extends Controller
         }
         if (! $user->can('precios.ver', $orden)) {
             unset($datos['descuento']);
+        }
+
+        $tipoDescuento = $datos['descuento_tipo'] ?? 'monto';
+        unset($datos['descuento_tipo']);
+
+        if (array_key_exists('descuento', $datos) && $tipoDescuento === 'porcentaje') {
+            // Guardamos el porcentaje; recalcularTotales() saca la cantidad en pesos.
+            $datos['descuento_porcentaje'] = $datos['descuento'];
+            $datos['descuento'] = null;
+        } elseif (array_key_exists('descuento', $datos)) {
+            $datos['descuento_porcentaje'] = null;
         }
 
         $orden->update($datos);

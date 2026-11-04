@@ -96,37 +96,89 @@
             </div>
         </div>
 
+        {{-- Checklist compacto: cada grupo es una tabla con las opciones como columnas.
+             Tocar el título de una columna marca esa opción en todos los puntos que falten del grupo. --}}
         <div class="tarjeta">
-            <h2>2. Revisión del vehículo</h2>
-            @foreach ($grupos as $grupo => $items)
-                <h3>{{ $grupo }}</h3>
-                @if ($grupo === 'Tablero')
-                    <p class="ayuda">Marca <strong>Sí</strong> si el testigo está encendido con el motor en marcha.</p>
-                @endif
-                @foreach ($items as $item)
-                    @php($actual = old("respuestas.{$item->id}.valor", $respuestas[$item->id]->valor ?? null))
-                    <div class="punto">
-                        <span>{{ $item->nombre }} @if ($item->obligatorio)<span class="tenue">*</span>@endif
-                            @if ($item->obligatorio && $actual === null)<span class="error-campo" style="display: inline;">· pendiente</span>@endif</span>
-                        @if (isset($opciones[$item->tipo_respuesta->value]))
-                            <div class="opciones" role="radiogroup" aria-label="{{ $item->nombre }}">
-                                @foreach ($opciones[$item->tipo_respuesta->value] as $valor => $texto)
-                                    <label><input type="radio" name="respuestas[{{ $item->id }}][valor]" value="{{ $valor }}" @checked($actual === $valor)><span>{{ $texto }}</span></label>
-                                @endforeach
-                            </div>
-                        @else
-                            <input type="{{ $item->tipo_respuesta->value === 'numero' ? 'number' : 'text' }}" name="respuestas[{{ $item->id }}][valor]" value="{{ $actual }}" style="max-width: 220px;">
+            <div class="encabezado" style="margin-bottom: .25rem;">
+                <h2 style="margin: 0;">2. Revisión del vehículo</h2>
+                <span class="progreso" id="progreso-total"></span>
+            </div>
+            <p class="ayuda">Toca el título de una columna (<strong>Sí</strong>, <strong>Bueno</strong>…) para marcar todos los que falten del grupo y luego corrige solo las excepciones. ✎ agrega un comentario. * obligatorio.</p>
+
+            <div class="grupos-check">
+                @foreach ($grupos as $grupo => $items)
+                    @php($porTipo = $items->groupBy(fn ($i) => $i->tipo_respuesta->value))
+                    {{-- Número de columnas de opciones del grupo (para que los campos de texto ocupen el mismo ancho) --}}
+                    @php($columnas = max(1, $porTipo->keys()->map(fn ($t) => count($opciones[$t] ?? []))->max()))
+                    <section class="grupo-check" data-grupo>
+                        <header>
+                            <h3>{{ $grupo }}</h3>
+                            <span class="progreso" data-progreso></span>
+                            <button type="button" class="boton-link chico" data-limpiar>Limpiar</button>
+                        </header>
+                        @if ($grupo === 'Tablero')
+                            <p class="ayuda" style="margin: 0 0 .25rem;"><strong>Sí</strong> = el testigo enciende con el motor en marcha.</p>
                         @endif
-                        @php($comentario = old("respuestas.{$item->id}.comentario", $respuestas[$item->id]->comentario ?? null))
-                        <details class="comentario" @if ($comentario) open @endif>
-                            <summary class="tenue chico">Agregar comentario</summary>
-                            <input type="text" name="respuestas[{{ $item->id }}][comentario]" value="{{ $comentario }}"
-                                   placeholder="Ej. solo tapetes delanteros" style="min-height: 36px; padding: .35rem .6rem; margin-top: .25rem;">
-                        </details>
-                    </div>
+                        <table class="matriz">
+                            @foreach ($porTipo as $tipo => $puntos)
+                                @if (isset($opciones[$tipo]))
+                                    {{-- "Marcar todos" solo en bloques de 3 o más puntos; en los chicos, las columnas solo llevan su nombre --}}
+                                    @php($masivo = $puntos->count() >= 3)
+                                    <tr class="cabecera">
+                                        <td class="tenue chico">{{ $masivo ? 'Marcar todos:' : '' }}</td>
+                                        @foreach ($opciones[$tipo] as $valor => $texto)
+                                            <th>
+                                                @if ($masivo)
+                                                    <button type="button" data-marcar="{{ $valor }}" data-tipo="{{ $tipo }}" title="Marcar «{{ $texto }}» en los que falten">{{ $texto }}</button>
+                                                @else
+                                                    <span class="titulo-columna">{{ $texto }}</span>
+                                                @endif
+                                            </th>
+                                        @endforeach
+                                        @for ($i = count($opciones[$tipo]); $i < $columnas; $i++)<td></td>@endfor
+                                        <td></td>
+                                    </tr>
+                                @endif
+                                @foreach ($puntos as $item)
+                                    @php($actual = old("respuestas.{$item->id}.valor", $respuestas[$item->id]->valor ?? null))
+                                    @php($comentario = old("respuestas.{$item->id}.comentario", $respuestas[$item->id]->comentario ?? null))
+                                    <tr data-item data-tipo="{{ $tipo }}" @class(['obligatorio' => $item->obligatorio])>
+                                        <th scope="row">
+                                            {{ $item->nombre }}@if ($item->obligatorio)<span class="requerido"> *</span>@endif
+                                            {{-- Va antes de las opciones: si se limpia el punto se envía "" y la respuesta se borra al guardar --}}
+                                            @isset($opciones[$tipo])<input type="hidden" name="respuestas[{{ $item->id }}][valor]" value="">@endisset
+                                        </th>
+                                        @if (isset($opciones[$tipo]))
+                                            @foreach ($opciones[$tipo] as $valor => $texto)
+                                                <td class="celda">
+                                                    <label title="{{ $texto }}">
+                                                        <input type="radio" name="respuestas[{{ $item->id }}][valor]" value="{{ $valor }}" @checked($actual === $valor) aria-label="{{ $item->nombre }}: {{ $texto }}">
+                                                        <span class="marca" data-valor="{{ $valor }}"></span>
+                                                    </label>
+                                                </td>
+                                            @endforeach
+                                            @for ($i = count($opciones[$tipo]); $i < $columnas; $i++)<td></td>@endfor
+                                        @else
+                                            <td colspan="{{ $columnas }}">
+                                                <input type="{{ $tipo === 'numero' ? 'number' : 'text' }}" class="valor" name="respuestas[{{ $item->id }}][valor]" value="{{ $actual }}"
+                                                       @if ($tipo === 'numero') min="0" inputmode="numeric" @endif aria-label="{{ $item->nombre }}">
+                                            </td>
+                                        @endif
+                                        <td class="celda-nota">
+                                            <button type="button" data-nota @class(['nota', 'tiene' => $comentario]) aria-label="Comentario de {{ $item->nombre }}">✎</button>
+                                        </td>
+                                    </tr>
+                                    <tr class="renglon-nota" @unless ($comentario) hidden @endunless>
+                                        <td colspan="{{ $columnas + 2 }}">
+                                            <input type="text" name="respuestas[{{ $item->id }}][comentario]" value="{{ $comentario }}" placeholder="Comentario: {{ $item->nombre }}">
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            @endforeach
+                        </table>
+                    </section>
                 @endforeach
-            @endforeach
-            <p class="ayuda">* Obligatorio para completar.</p>
+            </div>
         </div>
 
         <div class="tarjeta">
@@ -383,6 +435,81 @@
                 }
             });
         });
+    })();
+    // ── Checklist compacto ──────────────────────────────────────
+    (function () {
+        const grupos = document.querySelectorAll('[data-grupo]');
+        if (! grupos.length) return;
+
+        function estaContestado(renglon) {
+            const radio = renglon.querySelector('input[type=radio]:checked');
+            const campo = renglon.querySelector('input.valor');
+            return radio !== null || (campo !== null && campo.value.trim() !== '');
+        }
+
+        // Cuenta lo contestado por grupo y en total, y marca los renglones pendientes.
+        function contar() {
+            let total = 0, hechos = 0;
+            grupos.forEach(function (grupo) {
+                const renglones = grupo.querySelectorAll('[data-item]');
+                let contestados = 0;
+                renglones.forEach(function (r) {
+                    const listo = estaContestado(r);
+                    r.classList.toggle('contestado', listo);
+                    if (listo) contestados++;
+                });
+                grupo.querySelector('[data-progreso]').textContent = contestados + '/' + renglones.length;
+                grupo.classList.toggle('completo', contestados === renglones.length);
+                total += renglones.length;
+                hechos += contestados;
+            });
+            document.getElementById('progreso-total').textContent = hechos + ' de ' + total + ' contestados';
+        }
+
+        document.addEventListener('click', function (e) {
+            // Título de columna: marca esa opción en los puntos del grupo que no tienen respuesta.
+            // Los ya contestados se respetan para no perder las excepciones.
+            const marcar = e.target.closest('[data-marcar]');
+            if (marcar) {
+                const grupo = marcar.closest('[data-grupo]');
+                grupo.querySelectorAll('[data-item][data-tipo="' + marcar.dataset.tipo + '"]').forEach(function (r) {
+                    if (r.querySelector('input[type=radio]:checked')) return;
+                    const opcion = r.querySelector('input[type=radio][value="' + marcar.dataset.marcar + '"]');
+                    if (opcion) opcion.checked = true;
+                });
+                contar();
+                return;
+            }
+
+            // Limpiar: quita las respuestas del grupo (al guardar se borran).
+            const limpiar = e.target.closest('[data-limpiar]');
+            if (limpiar) {
+                const grupo = limpiar.closest('[data-grupo]');
+                grupo.querySelectorAll('input[type=radio]').forEach(function (i) { i.checked = false; });
+                grupo.querySelectorAll('input.valor').forEach(function (i) { i.value = ''; });
+                contar();
+                return;
+            }
+
+            // ✎: muestra u oculta el comentario del punto.
+            const nota = e.target.closest('[data-nota]');
+            if (nota) {
+                const renglon = nota.closest('tr').nextElementSibling;
+                renglon.hidden = ! renglon.hidden;
+                if (! renglon.hidden) renglon.querySelector('input').focus();
+            }
+        });
+
+        document.addEventListener('change', function (e) { if (e.target.closest('[data-grupo]')) contar(); });
+        document.addEventListener('input', function (e) {
+            if (e.target.matches('.renglon-nota input')) {
+                const boton = e.target.closest('tr').previousElementSibling.querySelector('[data-nota]');
+                boton.classList.toggle('tiene', e.target.value.trim() !== '');
+            }
+            if (e.target.matches('[data-grupo] input.valor')) contar();
+        });
+
+        contar();
     })();
 </script>
 @endpush

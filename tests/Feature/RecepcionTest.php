@@ -117,6 +117,45 @@ class RecepcionTest extends TestCase
         $this->assertSame('Gato', $respuesta->item_nombre);
     }
 
+    public function test_el_checklist_compacto_trae_marcar_todos_por_grupo(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+
+        $pagina = $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))->assertOk();
+
+        // Botones para marcar toda una columna (ej. "Bueno" en Exterior) y para limpiar el grupo
+        $pagina->assertSee('data-marcar="bueno"', false)->assertSee('data-marcar="no"', false)->assertSee('data-limpiar', false);
+        // Cada punto de opciones lleva un campo vacío antes, para que "Limpiar" sí borre al guardar
+        $gato = ChecklistItem::where('nombre', 'Gato')->firstOrFail();
+        $pagina->assertSee('<input type="hidden" name="respuestas[' . $gato->id . '][valor]" value="">', false);
+    }
+
+    public function test_las_preguntas_de_si_no_de_funcionamiento_no_se_marcan_en_masa(): void
+    {
+        // "El vehículo enciende" y "Llegó en grúa" van en Funcionamiento, fuera del Tablero:
+        // "Marcar todos: No" del Tablero (ningún testigo encendido) no debe decir que el auto no enciende.
+        $this->assertSame('funcionamiento', ChecklistItem::where('nombre', 'El vehículo enciende')->firstOrFail()->grupo->value);
+        $this->assertFalse(ChecklistItem::where('grupo', 'tablero')->where('nombre', 'Llegó en grúa')->exists());
+
+        // Y como en Funcionamiento son solo dos de Sí/No, su bloque no lleva botón de marcar todos.
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
+            ->assertSeeInOrder(['Funcionamiento', '<span class="titulo-columna">Sí</span>', 'El vehículo enciende', 'data-marcar="bueno"'], false);
+    }
+
+    public function test_limpiar_un_punto_borra_su_respuesta_al_guardar(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $gato = ChecklistItem::where('nombre', 'Gato')->firstOrFail();
+
+        $this->actingAs($this->recepcion)->put(route('inspecciones.update', $orden->recepcion), ['respuestas' => [$gato->id => ['valor' => 'si']]]);
+        $this->assertSame(1, $orden->recepcion->respuestas()->count());
+
+        // Así llega del formulario cuando se limpió: solo el campo vacío, sin opción marcada
+        $this->put(route('inspecciones.update', $orden->recepcion), ['respuestas' => [$gato->id => ['valor' => '', 'comentario' => '']]]);
+        $this->assertSame(0, $orden->recepcion->respuestas()->count());
+    }
+
     public function test_ignora_respuestas_de_puntos_que_no_aplican(): void
     {
         // Un punto exclusivo de motocicleta no se guarda en la recepción de un sedán.

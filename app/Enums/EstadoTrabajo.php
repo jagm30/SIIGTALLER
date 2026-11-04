@@ -4,11 +4,16 @@ namespace App\Enums;
 
 /**
  * Avance de un trabajo dentro de la orden.
+ *   Pendiente             todavía no se empieza.
+ *   En proceso            el mecánico ya está trabajando en él.
+ *   Esperando refacciones se detuvo porque falta una pieza.
+ *   Terminado             listo.
  */
 enum EstadoTrabajo: string
 {
     case Pendiente = 'pendiente';
     case EnProceso = 'en_proceso';
+    case EsperaRefacciones = 'espera_refacciones';
     case Terminado = 'terminado';
 
     public function label(): string
@@ -16,6 +21,7 @@ enum EstadoTrabajo: string
         return match ($this) {
             self::Pendiente => 'Pendiente',
             self::EnProceso => 'En proceso',
+            self::EsperaRefacciones => 'Esperando refacciones',
             self::Terminado => 'Terminado',
         };
     }

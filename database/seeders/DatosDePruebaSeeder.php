@@ -216,9 +216,9 @@ class DatosDePruebaSeeder extends Seeder
             $insp->respuestas()->create([
                 'checklist_item_id' => $item->id,
                 'valor' => match ($item->tipo_respuesta->value) {
-                    // Accesorios y documentos presentes; en el tablero, ningún testigo encendido.
+                    // Accesorios y documentos presentes; en el tablero, ningún testigo encendido; no llegó en grúa.
                     'si_no' => match (true) {
-                        $item->nombre === 'El vehículo enciende' => 'si',
+                        $item->nombre === 'Llegó en grúa' => 'no',
                         $item->grupo->value === 'tablero' => 'no',
                         default => 'si',
                     },

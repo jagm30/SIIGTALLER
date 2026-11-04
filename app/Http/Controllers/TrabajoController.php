@@ -8,6 +8,7 @@ use App\Enums\TipoCobro;
 use App\Http\Controllers\Concerns\ValidaOrdenEditable;
 use App\Models\OrdenServicio;
 use App\Models\OrdenServicioItem;
+use App\Models\PreferenciaOperacion;
 use App\Models\Servicio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,11 @@ class TrabajoController extends Controller
     {
         $this->validarOrdenEditable($request->user(), $orden);
 
+        // En el formulario, "Otro trabajo" llega como servicio_id = "otro": es un trabajo fuera de catálogo.
+        if ($request->input('servicio_id') === 'otro') {
+            $request->merge(['servicio_id' => null]);
+        }
+
         $datos = $request->validate([
             'servicio_id' => ['nullable', 'exists:servicios,id'],
             'descripcion' => ['nullable', 'required_without:servicio_id', 'string', 'max:200'],
@@ -40,6 +46,9 @@ class TrabajoController extends Controller
         ], ['descripcion.required_without' => 'Elige un servicio del catálogo o describe el trabajo.']);
 
         $servicio = isset($datos['servicio_id']) ? Servicio::find($datos['servicio_id']) : null;
+
+        // Se permite repetir un servicio (ej. pintura en dos piezas), pero avisamos por si fue un descuido.
+        $yaEstaba = $servicio && $orden->trabajos()->where('servicio_id', $servicio->id)->exists();
 
         DB::transaction(function () use ($request, $orden, $datos, $servicio) {
             $trabajo = $orden->trabajos()->create([
@@ -71,7 +80,14 @@ class TrabajoController extends Controller
             $orden->recalcularTotales();
         });
 
-        return back()->with('ok', 'Trabajo agregado.');
+        $respuesta = back()->with('ok', 'Trabajo agregado.');
+
+        if ($yaEstaba) {
+            $respuesta->with('aviso', "«{$servicio->nombre}» ya estaba en la orden y se agregó otra vez. "
+                . 'Si es el mismo trabajo, quita el renglón repetido y cambia la cantidad.');
+        }
+
+        return $respuesta;
     }
 
     /** Avance del trabajo y horas del mecánico. */
@@ -89,8 +105,10 @@ class TrabajoController extends Controller
         DB::transaction(function () use ($request, $trabajo, $orden, $datos) {
             $trabajo->update(['estado' => $datos['estado'], 'notas' => $datos['notas'] ?? $trabajo->notas]);
 
-            // El mecánico registra sus horas; en cobro por hora eso se vuelve la cantidad a cobrar.
-            if (isset($datos['horas']) && $request->user()->esMecanico()) {
+            // El mecánico registra sus horas (si el taller lo tiene activado en Preferencias);
+            // en cobro por hora eso se vuelve la cantidad a cobrar.
+            $registraHoras = PreferenciaOperacion::bool('mecanicos_registran_horas', $orden->sucursal_id, true);
+            if ($registraHoras && isset($datos['horas']) && $request->user()->esMecanico()) {
                 $trabajo->mecanicos()->syncWithoutDetaching([$request->user()->id => ['horas' => $datos['horas']]]);
                 $trabajo->sincronizarHorasDeMecanicos();
                 $orden->recalcularTotales();
@@ -100,17 +118,43 @@ class TrabajoController extends Controller
         return back()->with('ok', 'Trabajo actualizado.');
     }
 
+    /**
+     * Pone el precio a un trabajo que quedó sin precio (por ejemplo, uno fuera de catálogo
+     * que registró el mecánico, que no ve precios). Solo quien ve precios.
+     */
+    public function precio(Request $request, OrdenServicioItem $trabajo): RedirectResponse
+    {
+        $orden = $trabajo->orden;
+        $this->validarOrdenEditable($request->user(), $orden);
+        abort_unless($request->user()->can('precios.ver', $orden), 403);
+
+        $datos = $request->validate(['precio_unitario' => ['required', 'numeric', 'min:0', 'max:9999999']], [], ['precio_unitario' => 'precio']);
+
+        DB::transaction(function () use ($trabajo, $orden, $datos) {
+            $trabajo->update($datos);
+            $orden->recalcularTotales();
+        });
+
+        return back()->with('ok', 'Precio guardado.');
+    }
+
     public function destroy(Request $request, OrdenServicioItem $trabajo): RedirectResponse
     {
         $orden = $trabajo->orden;
         $this->validarOrdenEditable($request->user(), $orden);
 
+        $piezas = $trabajo->refacciones()->count();
+
         DB::transaction(function () use ($trabajo, $orden) {
-            // Las piezas del trabajo se quedan en la orden (la llave foránea las deja "sin trabajo").
+            // Al quitar el trabajo se quitan también sus refacciones (ej. afinación → bujías y filtros).
+            // Las piezas sueltas de la orden, sin trabajo asignado, no se tocan.
+            $trabajo->refacciones()->delete();
             $trabajo->delete();
             $orden->recalcularTotales();
         });
 
-        return back()->with('ok', 'Trabajo eliminado.');
+        return back()->with('ok', $piezas > 0
+            ? "Trabajo eliminado junto con sus {$piezas} refacciones."
+            : 'Trabajo eliminado.');
     }
 }

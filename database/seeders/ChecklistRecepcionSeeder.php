@@ -38,8 +38,6 @@ class ChecklistRecepcionSeeder extends Seeder
             ['accesorios', 'Cubreequipaje o cortina de cajuela', 'si_no', false, 'ambas', ['suv', 'hatchback']],
 
             // Tablero: testigos encendidos al recibir
-            ['tablero', 'El vehículo enciende', 'si_no', true, 'recepcion', null],
-            ['tablero', 'Llegó en grúa', 'si_no', true, 'recepcion', null],
             ['tablero', 'Check engine', 'si_no', true, 'ambas', null],
             ['tablero', 'ABS', 'si_no', true, 'ambas', null],
             ['tablero', 'Bolsas de aire', 'si_no', true, 'ambas', $A],
@@ -50,7 +48,10 @@ class ChecklistRecepcionSeeder extends Seeder
             ['tablero', 'Presión de llantas', 'si_no', false, 'ambas', $A],
             ['tablero', 'Otro testigo encendido', 'texto', false, 'ambas', null],
 
-            // Funcionamiento
+            // Funcionamiento. Las dos preguntas de Sí/No van aquí y no en Tablero, porque en Tablero
+            // "Sí" significa "testigo encendido" (algo malo) y "Marcar todos: No" no debe responder que el auto no enciende.
+            ['funcionamiento', 'El vehículo enciende', 'si_no', true, 'recepcion', null],
+            ['funcionamiento', 'Llegó en grúa', 'si_no', true, 'recepcion', null],
             ['funcionamiento', 'Luces delanteras (bajas y altas)', 'estado', true, 'ambas', null],
             ['funcionamiento', 'Luces traseras y de freno', 'estado', true, 'ambas', null],
             ['funcionamiento', 'Direccionales e intermitentes', 'estado', true, 'ambas', null],

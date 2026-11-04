@@ -1,5 +1,8 @@
 {{-- Estilos sin librerías externas. Botones y campos grandes para usar con el dedo en tableta. --}}
 <style>
+    /* Lo que se oculta con el atributo hidden se oculta siempre, aunque su clase diga display: grid o flex. */
+    [hidden] { display: none !important; }
+
     :root {
         --fondo: #f4f5f7; --tarjeta: #fff; --texto: #1f2933; --tenue: #66727f; --borde: #d9dde3;
         --primario: #1f5fbf; --primario-oscuro: #174a96; --exito: #1e7a46; --peligro: #b3261e; --alerta: #a86b00;
@@ -44,6 +47,7 @@
     textarea { min-height: 80px; }
     input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
     .casilla { display: flex; align-items: center; gap: .5rem; font-weight: 400; }
+    .casilla input { flex-shrink: 0; }
     .casilla input { width: 22px; height: 22px; }
     .ayuda { font-size: .85rem; color: var(--tenue); margin-top: .2rem; }
     .error-campo { font-size: .85rem; color: var(--peligro); margin-top: .2rem; }
@@ -74,9 +78,7 @@
     .contador { text-align: center; }
     .contador strong { display: block; font-size: 1.8rem; }
 
-    /* Checklist: opciones como botones grandes */
-    .punto { display: grid; grid-template-columns: minmax(160px, 1fr) auto; gap: .35rem 1rem; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--borde); }
-    .punto .comentario { grid-column: 1 / -1; }
+    /* Opciones como botones grandes (fotos, daños) */
     .opciones { display: flex; flex-wrap: wrap; gap: .35rem; }
     .opciones label { margin: 0; font-weight: 500; }
     .opciones input { position: absolute; opacity: 0; }
@@ -100,7 +102,39 @@
     .paginacion .pagination .disabled span { color: var(--tenue); }
 
     @media (max-width: 640px) {
-        .punto { grid-template-columns: 1fr; }
         th.ocultar-movil, td.ocultar-movil { display: none; }
     }
+    /* Checklist compacto (recepción y entrega): grupos en columnas, opciones como celdas para tocar */
+    .progreso { font-size: .85rem; color: var(--tenue); white-space: nowrap; }
+    .grupos-check { column-width: 340px; column-gap: 1rem; }
+    .grupo-check { break-inside: avoid; border: 1px solid var(--borde); border-radius: var(--radio); padding: .5rem .6rem .4rem; margin-bottom: 1rem; }
+    .grupo-check.completo { border-color: #b4dcc3; background: #f6fbf8; }
+    .grupo-check header { display: flex; align-items: center; gap: .5rem; margin-bottom: .2rem; }
+    .grupo-check h3 { margin: 0; font-size: 1rem; }
+    .grupo-check header .progreso { margin-right: auto; }
+    .grupo-check.completo [data-progreso] { color: var(--exito); font-weight: 600; }
+    .matriz { width: 100%; border-collapse: collapse; }
+    .matriz th, .matriz td { padding: 0; border: 0; vertical-align: middle; text-transform: none; letter-spacing: 0; color: inherit; }
+    .matriz tr[data-item] { border-top: 1px solid #eef0f3; }
+    .matriz tr[data-item] > th { font-weight: 400; text-align: left; font-size: .92rem; line-height: 1.2; padding: .2rem .4rem .2rem 0; }
+    .matriz .requerido { color: var(--peligro); font-weight: 700; }
+    .matriz tr.contestado .requerido { color: var(--tenue); font-weight: 400; }
+    .matriz .cabecera th { padding-bottom: .1rem; }
+    .matriz .cabecera button { width: 100%; min-height: 34px; padding: .2rem .25rem; border: 1px solid var(--borde); border-radius: 6px; background: #f4f5f7;
+        font: inherit; font-size: .78rem; font-weight: 600; color: var(--texto); cursor: pointer; }
+    .matriz .titulo-columna { display: block; text-align: center; font-size: .78rem; font-weight: 600; color: var(--tenue); }
+    .matriz .cabecera button:active { background: var(--primario); color: #fff; }
+    .matriz .celda { width: 48px; text-align: center; }
+    .matriz .celda label { display: flex; align-items: center; justify-content: center; height: 42px; margin: 0; cursor: pointer; }
+    .matriz .celda input { position: absolute; opacity: 0; }
+    .matriz .marca { width: 24px; height: 24px; border: 2px solid #b8bfc8; border-radius: 50%; background: #fff; }
+    .matriz .celda input:checked + .marca { border-color: var(--primario); background: var(--primario); box-shadow: inset 0 0 0 4px #fff; }
+    .matriz .celda input:checked + .marca[data-valor="regular"] { border-color: var(--alerta); background: var(--alerta); }
+    .matriz .celda input:checked + .marca[data-valor="malo"] { border-color: var(--peligro); background: var(--peligro); }
+    .matriz .celda input:focus-visible + .marca { outline: 2px solid var(--primario); outline-offset: 2px; }
+    .matriz input.valor { min-height: 36px; padding: .25rem .5rem; }
+    .matriz .celda-nota { width: 36px; text-align: right; }
+    .matriz .nota { width: 34px; height: 34px; border: 0; background: none; color: #b8bfc8; font-size: 1rem; cursor: pointer; border-radius: 6px; }
+    .matriz .nota.tiene { color: var(--primario); background: #e8f0fb; }
+    .matriz .renglon-nota input { min-height: 34px; padding: .25rem .5rem; margin: 0 0 .3rem; font-size: .9rem; }
 </style>

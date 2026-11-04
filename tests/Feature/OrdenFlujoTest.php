@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\EstadoOrden;
+use App\Enums\EstadoTrabajo;
 use App\Enums\Rol;
 use App\Enums\TipoInspeccion;
 use App\Models\ChecklistItem;
 use App\Models\OrdenServicio;
+use App\Models\PreferenciaOperacion;
 use App\Models\Refaccion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -158,19 +160,145 @@ class OrdenFlujoTest extends TestCase
             ->assertSessionHasErrors('orden_garantia_de_id');
     }
 
-    public function test_quitar_un_trabajo_recalcula_el_total_y_deja_sus_piezas(): void
+    public function test_quitar_un_trabajo_quita_sus_refacciones_y_deja_las_sueltas(): void
     {
         $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
-        $servicio = $this->servicio();
+        $afinacion = $this->servicio(['nombre' => 'Afinación mayor']);
+        $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza', 'precio_venta' => 100]);
         $filtro = Refaccion::create(['descripcion' => 'Filtro', 'unidad' => 'pieza', 'precio_venta' => 130]);
-        $servicio->refaccionesSugeridas()->attach($filtro->id, ['cantidad' => 1]);
+        $afinacion->refaccionesSugeridas()->attach([$bujia->id => ['cantidad' => 4], $filtro->id => ['cantidad' => 1]]);
 
-        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $servicio->id, 'agregar_sugeridas' => '1']);
-        $this->assertEquals(980.00, $orden->fresh()->total);
+        // Como administrador, para poder capturar el precio de la pieza suelta
+        $this->actingAs($this->admin)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+        // Una pieza suelta, sin trabajo: no debe borrarse
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => 'otra', 'descripcion' => 'Limpiador', 'cantidad' => 1, 'precio_unitario' => 50]);
+        $this->assertSame(3, $orden->refacciones()->count());
 
-        $this->delete(route('trabajos.destroy', $orden->trabajos()->first()))->assertSessionHas('ok');
+        $this->delete(route('trabajos.destroy', $orden->trabajos()->first()))
+            ->assertSessionHas('ok', 'Trabajo eliminado junto con sus 2 refacciones.');
 
-        $this->assertEquals(130.00, $orden->fresh()->total);
-        $this->assertNull($orden->refacciones()->first()->orden_servicio_item_id);
+        $this->assertSame(['Limpiador'], $orden->refacciones()->pluck('descripcion')->all());
+        $this->assertEquals(50.00, $orden->fresh()->total);
+    }
+
+    public function test_avisa_si_el_servicio_ya_esta_en_la_orden_pero_lo_permite(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $pintura = $this->servicio(['nombre' => 'Pintura de pieza']);
+
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $pintura->id, 'notas' => 'Puerta'])
+            ->assertSessionMissing('aviso');
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => $pintura->id, 'notas' => 'Salpicadera'])
+            ->assertSessionHas('aviso');
+
+        $this->assertSame(2, $orden->trabajos()->count(), 'Se permite repetirlo');
+
+        // La pantalla marca el servicio como "ya está en la orden"
+        $this->get(route('ordenes.show', $orden))->assertSee('(ya está en la orden)');
+    }
+
+    public function test_la_misma_refaccion_se_suma_en_un_solo_renglon(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $afinacion = $this->servicio(['nombre' => 'Afinación mayor']);
+        $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza', 'precio_venta' => 100]);
+        $afinacion->refaccionesSugeridas()->attach($bujia->id, ['cantidad' => 4]);
+
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+        $trabajo = $orden->trabajos()->firstOrFail();
+
+        // Sin elegir trabajo: la bujía solo está en un renglón, se suma ahí
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1])
+            ->assertSessionHas('ok', 'Se sumó a «Bujía», que ya estaba en la orden. Ahora son 5.');
+        // Eligiendo el mismo trabajo: también se suma
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1, 'orden_servicio_item_id' => $trabajo->id]);
+
+        $this->assertSame(1, $orden->refacciones()->count());
+        $renglon = $orden->refacciones()->firstOrFail();
+        $this->assertEquals(6, $renglon->cantidad);
+        $this->assertEquals(600.00, $renglon->importe);
+        $this->assertEquals(1450.00, $orden->fresh()->total); // 850 de la afinación + 600 de bujías
+    }
+
+    public function test_no_suma_si_la_pieza_es_distinta_en_origen_trabajo_o_precio(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza', 'precio_venta' => 100]);
+        $this->actingAs($this->admin);
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => $this->servicio()->id]);
+        $trabajo = $orden->trabajos()->firstOrFail();
+
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 4]);
+        // La trajo el cliente: renglón aparte (va sin costo)
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1, 'proporcionada_por_cliente' => '1']);
+        // Para otro trabajo: renglón aparte
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1, 'orden_servicio_item_id' => $trabajo->id]);
+        // Ahora está en dos renglones del taller y no eligieron trabajo: no adivina
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1]);
+        // Precio distinto: renglón aparte
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => $bujia->id, 'cantidad' => 1, 'orden_servicio_item_id' => $trabajo->id, 'precio_unitario' => 120]);
+
+        $this->assertSame(5, $orden->refacciones()->count());
+    }
+
+    public function test_otra_refaccion_y_otro_trabajo_fuera_de_catalogo(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $this->actingAs($this->admin);
+
+        // Elegir "Otra" sin escribir el nombre no se acepta
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => 'otra', 'cantidad' => 1])->assertSessionHasErrors('descripcion');
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => 'otro'])->assertSessionHasErrors('descripcion');
+
+        $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => 'otra', 'descripcion' => 'Tornillo especial', 'numero_parte' => 'TS-10', 'cantidad' => 2, 'precio_unitario' => 35])
+            ->assertSessionHas('ok', 'Refacción agregada.');
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => 'otro', 'descripcion' => 'Soldadura de escape', 'tipo_cobro' => 'fijo', 'precio_unitario' => 400]);
+
+        $pieza = $orden->refacciones()->firstOrFail();
+        $this->assertNull($pieza->refaccion_id);
+        $this->assertSame('TS-10', $pieza->numero_parte);
+        $this->assertEquals(470.00, $orden->fresh()->total); // 70 + 400
+    }
+
+    public function test_la_tabla_de_refacciones_muestra_para_que_trabajo_se_uso(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $afinacion = $this->servicio(['nombre' => 'Afinación mayor']);
+        $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza']);
+        $afinacion->refaccionesSugeridas()->attach($bujia->id, ['cantidad' => 4]);
+
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+
+        $this->get(route('ordenes.show', $orden))
+            ->assertSeeInOrder(['Para el trabajo', 'Bujía', 'Afinación mayor']);
+    }
+
+    public function test_un_trabajo_puede_quedar_esperando_refacciones(): void
+    {
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $trabajo = $orden->trabajos()->create(['servicio_id' => $this->servicio()->id]);
+
+        $this->actingAs($this->mecanico)->get(route('ordenes.show', $orden))->assertSee('Esperando refacciones');
+        $this->patch(route('trabajos.update', $trabajo), ['estado' => 'espera_refacciones'])->assertSessionHas('ok');
+
+        $this->assertSame(EstadoTrabajo::EsperaRefacciones, $trabajo->fresh()->estado);
+    }
+
+    public function test_si_se_desactivan_las_horas_el_mecanico_no_las_registra(): void
+    {
+        PreferenciaOperacion::where('clave', 'mecanicos_registran_horas')->update(['valor' => '0']);
+        PreferenciaOperacion::olvidar();
+
+        $orden = $this->ordenEnReparacion($this->recepcion, $this->mecanico);
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['descripcion' => 'Diagnóstico eléctrico', 'tipo_cobro' => 'por_hora', 'cantidad' => 2]);
+        $trabajo = $orden->trabajos()->firstOrFail();
+
+        $this->get(route('ordenes.show', $orden))->assertDontSee('Mis horas');
+        $this->patch(route('trabajos.update', $trabajo), ['estado' => 'terminado', 'horas' => 5])->assertSessionHas('ok');
+
+        $trabajo->refresh();
+        $this->assertSame(EstadoTrabajo::Terminado, $trabajo->estado, 'El avance sí se guarda');
+        $this->assertEquals(2, $trabajo->cantidad, 'Se cobran las horas capturadas al agregar el trabajo');
+        $this->assertNull($trabajo->mecanicos()->first()->pivot->horas);
     }
 }

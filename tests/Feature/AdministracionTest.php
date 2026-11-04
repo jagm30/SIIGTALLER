@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\Rol;
 use App\Models\ModeloVehiculo;
 use App\Models\PreferenciaOperacion;
+use App\Models\Refaccion;
 use App\Models\Servicio;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,6 +40,42 @@ class AdministracionTest extends TestCase
             ->assertRedirect('/servicios');
         $this->assertEquals(2400, $servicio->fresh()->precio);
         $this->assertFalse($servicio->fresh()->activo, 'Sin la casilla marcada queda inactivo');
+    }
+
+    public function test_configura_las_refacciones_que_lleva_un_servicio(): void
+    {
+        $servicio = $this->servicio(['nombre' => 'Afinación mayor']);
+        $bujia = Refaccion::create(['descripcion' => 'Bujía de iridio', 'unidad' => 'pieza', 'activo' => true]);
+        $filtro = Refaccion::create(['descripcion' => 'Filtro de aire', 'unidad' => 'pieza', 'activo' => true]);
+
+        $this->post(route('servicios.refacciones.store', $servicio), ['refaccion_id' => $bujia->id, 'cantidad' => 4])->assertSessionHas('ok');
+        $this->post(route('servicios.refacciones.store', $servicio), ['refaccion_id' => $filtro->id, 'cantidad' => 1]);
+        // Volver a agregar la misma no la duplica: actualiza la cantidad
+        $this->post(route('servicios.refacciones.store', $servicio), ['refaccion_id' => $bujia->id, 'cantidad' => 6]);
+
+        $this->assertSame(2, $servicio->refaccionesSugeridas()->count());
+        $this->assertEquals(6, $servicio->refaccionesSugeridas()->find($bujia->id)->pivot->cantidad);
+
+        // La pantalla de edición muestra la lista
+        $this->get(route('servicios.edit', $servicio))->assertSee('Refacciones que lleva')->assertSee('Bujía de iridio');
+
+        $this->delete(route('servicios.refacciones.destroy', [$servicio, $filtro]))->assertSessionHas('ok');
+        $this->assertSame(1, $servicio->refaccionesSugeridas()->count());
+
+        // Sin cantidad o sin refacción no se guarda
+        $this->post(route('servicios.refacciones.store', $servicio), ['cantidad' => 0])->assertSessionHasErrors(['refaccion_id', 'cantidad']);
+    }
+
+    public function test_solo_el_administrador_configura_las_refacciones_de_un_servicio(): void
+    {
+        $servicio = $this->servicio();
+        $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza', 'activo' => true]);
+
+        $this->actingAs($this->usuario(Rol::Mecanico))
+            ->post(route('servicios.refacciones.store', $servicio), ['refaccion_id' => $bujia->id, 'cantidad' => 4])
+            ->assertForbidden();
+
+        $this->assertSame(0, $servicio->refaccionesSugeridas()->count());
     }
 
     public function test_un_servicio_usado_se_desactiva_en_lugar_de_borrarse(): void

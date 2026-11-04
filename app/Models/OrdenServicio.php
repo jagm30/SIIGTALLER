@@ -43,6 +43,7 @@ class OrdenServicio extends Model
         'observaciones',
         'motivo_cancelacion',
         'descuento',
+        'descuento_porcentaje',
     ];
 
     protected function casts(): array
@@ -56,6 +57,7 @@ class OrdenServicio extends Model
             'fecha_entrega' => 'datetime',
             'subtotal' => 'decimal:2',
             'descuento' => 'decimal:2',
+            'descuento_porcentaje' => 'decimal:2',
             'iva' => 'decimal:2',
             'total' => 'decimal:2',
         ];
@@ -323,7 +325,12 @@ class OrdenServicio extends Model
         }
 
         $subtotal = (float) $this->trabajos()->sum('importe') + (float) $this->refacciones()->sum('importe');
-        $descuento = (float) ($this->descuento ?? 0);
+
+        // Descuento en porcentaje: se vuelve a calcular cada vez, así sigue valiendo aunque
+        // después se agreguen o quiten trabajos. Si es una cantidad fija, se usa tal cual.
+        $descuento = $this->descuento_porcentaje !== null
+            ? $subtotal * (float) $this->descuento_porcentaje / 100
+            : (float) ($this->descuento ?? 0);
         $total = max($subtotal - $descuento, 0);
         $pct = PreferenciaOperacion::decimal('iva_porcentaje', $this->sucursal_id, 16.0);
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ServicioRequest;
+use App\Models\Refaccion;
 use App\Models\Servicio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,7 +37,15 @@ class ServicioController extends Controller
 
     public function edit(Servicio $servicio): View
     {
-        return view('servicios.edit', compact('servicio'));
+        $servicio->load('refaccionesSugeridas');
+
+        return view('servicios.edit', [
+            'servicio' => $servicio,
+            // Para el selector de "agregar refacción": solo activas y que aún no estén en la lista.
+            'refacciones' => Refaccion::activas()
+                ->whereNotIn('id', $servicio->refaccionesSugeridas->pluck('id'))
+                ->get(),
+        ]);
     }
 
     public function update(ServicioRequest $request, Servicio $servicio): RedirectResponse
@@ -59,5 +68,32 @@ class ServicioController extends Controller
         $servicio->delete();
 
         return back()->with('ok', 'Servicio eliminado.');
+    }
+
+    // ── Refacciones que lleva el servicio ────────────────────────
+    // Son las que se proponen al agregar el servicio a una orden (ej. afinación mayor →
+    // bujías, filtros, aceite). El mecánico puede quitarlas o cambiarlas en la orden.
+
+    /** Agrega una refacción a la lista, o actualiza su cantidad si ya estaba. */
+    public function agregarRefaccion(Request $request, Servicio $servicio): RedirectResponse
+    {
+        $datos = $request->validate([
+            'refaccion_id' => ['required', 'exists:refacciones,id'],
+            'cantidad' => ['required', 'numeric', 'min:0.001', 'max:999'],
+        ], ['refaccion_id.required' => 'Elige una refacción.'], ['refaccion_id' => 'refacción']);
+
+        $servicio->refaccionesSugeridas()->syncWithoutDetaching([
+            $datos['refaccion_id'] => ['cantidad' => $datos['cantidad']],
+        ]);
+
+        return back()->with('ok', 'Refacción agregada al servicio.');
+    }
+
+    /** Quita una refacción de la lista. No afecta órdenes que ya la usaron. */
+    public function quitarRefaccion(Servicio $servicio, Refaccion $refaccion): RedirectResponse
+    {
+        $servicio->refaccionesSugeridas()->detach($refaccion->id);
+
+        return back()->with('ok', 'Refacción quitada del servicio.');
     }
 }

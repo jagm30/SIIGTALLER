@@ -91,8 +91,17 @@
                 </div>
                 @if ($verPrecios)
                     <div class="campo">
+                        {{-- El descuento puede ser en pesos o en porcentaje del subtotal --}}
+                        @php($enPorcentaje = old('descuento_tipo', $orden->descuento_porcentaje !== null ? 'porcentaje' : 'monto') === 'porcentaje')
                         <label for="descuento">Descuento</label>
-                        <input type="number" step="0.01" min="0" id="descuento" name="descuento" value="{{ old('descuento', $orden->descuento) }}" @disabled(! $editable)>
+                        <div class="fila" style="flex-wrap: nowrap;">
+                            <select name="descuento_tipo" aria-label="Tipo de descuento" style="width: auto;" @disabled(! $editable)>
+                                <option value="monto" @selected(! $enPorcentaje)>$</option>
+                                <option value="porcentaje" @selected($enPorcentaje)>%</option>
+                            </select>
+                            <input type="number" step="0.01" min="0" id="descuento" name="descuento" @disabled(! $editable)
+                                   value="{{ old('descuento', $enPorcentaje ? (float) $orden->descuento_porcentaje : $orden->descuento) }}">
+                        </div>
                     </div>
                 @endif
             @endunless
@@ -131,7 +140,7 @@
                                             <option value="{{ $valor }}" @selected($t->estado->value === $valor)>{{ $texto }}</option>
                                         @endforeach
                                     </select>
-                                    @if ($user->esMecanico())
+                                    @if ($user->esMecanico() && $registraHoras)
                                         <input type="number" name="horas" step="0.25" min="0" placeholder="Mis horas" style="width: 110px;">
                                         <button class="boton chico secundario">OK</button>
                                     @endif
@@ -140,10 +149,20 @@
                                 {{ $t->estado->label() }}
                             @endif
                         </td>
-                        @if ($verPrecios)<td class="derecha">{{ $dinero($t->importe) }}</td>@endif
+                        @if ($verPrecios)
+                            <td class="derecha">
+                                @if ($t->precio_unitario === null && $puedeTrabajar)
+                                    {{-- Quedó sin precio (lo registró alguien que no ve precios): se completa aquí --}}
+                                    @include('ordenes._falta_precio', ['accion' => route('trabajos.precio', $t)])
+                                @else
+                                    {{ $dinero($t->importe) }}
+                                @endif
+                            </td>
+                        @endif
                         <td>
                             @if ($puedeTrabajar)
-                                <form method="POST" action="{{ route('trabajos.destroy', $t) }}" onsubmit="return confirm('¿Quitar este trabajo?')">
+                                <form method="POST" action="{{ route('trabajos.destroy', $t) }}"
+                                      onsubmit="return confirm('{{ $orden->refacciones->where('orden_servicio_item_id', $t->id)->isNotEmpty() ? '¿Quitar este trabajo y sus refacciones?' : '¿Quitar este trabajo?' }}')">
                                     @csrf @method('DELETE')
                                     <button class="boton-link">Quitar</button>
                                 </form>
@@ -161,19 +180,23 @@
             <form method="POST" action="{{ route('trabajos.store', $orden) }}" style="margin-top: 1rem;">
                 @csrf
                 <h3>Agregar trabajo</h3>
+                @php($serviciosEnOrden = $orden->trabajos->pluck('servicio_id')->filter())
                 <div class="rejilla">
                     <div class="campo">
-                        <label for="servicio_id">Servicio del catálogo</label>
-                        <select id="servicio_id" name="servicio_id">
-                            <option value="">— Otro (escríbelo abajo) —</option>
+                        <label for="servicio_id">Servicio</label>
+                        {{-- "Otro trabajo" muestra los campos para escribirlo (ver script al final) --}}
+                        <select id="servicio_id" name="servicio_id" required data-otro="#trabajo-otro" data-valor-otro="otro">
+                            <option value="">Elige un servicio…</option>
                             @foreach ($servicios as $s)
-                                <option value="{{ $s->id }}">{{ $s->nombre }} · {{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif</option>
+                                <option value="{{ $s->id }}"
+                                    data-sugeridas="{{ $s->refacciones_sugeridas_count }}"
+                                    @if ($serviciosEnOrden->contains($s->id)) data-ya-esta @endif>
+                                    {{ $s->nombre }} · {{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif
+                                    @if ($serviciosEnOrden->contains($s->id)) (ya está en la orden) @endif
+                                </option>
                             @endforeach
+                            <option value="otro">Otro trabajo (escribirlo)…</option>
                         </select>
-                    </div>
-                    <div class="campo">
-                        <label for="descripcion">Descripción <span class="tenue">(si no está en el catálogo)</span></label>
-                        <input type="text" id="descripcion" name="descripcion">
                     </div>
                     <div class="campo">
                         <label for="cantidad">Cantidad u horas</label>
@@ -190,7 +213,36 @@
                         </div>
                     @endunless
                 </div>
-                <label class="casilla campo"><input type="checkbox" name="agregar_sugeridas" value="1" checked> Agregar las refacciones que normalmente lleva el servicio</label>
+
+                {{-- Solo aparece al elegir "Otro trabajo" --}}
+                <div id="trabajo-otro" class="rejilla" hidden>
+                    <div class="campo">
+                        <label for="descripcion">Describe el trabajo</label>
+                        <input type="text" id="descripcion" name="descripcion" maxlength="200" data-requerido>
+                    </div>
+                    <div class="campo">
+                        <label for="tipo_cobro">Tipo de cobro</label>
+                        <select id="tipo_cobro" name="tipo_cobro">
+                            @foreach (\App\Enums\TipoCobro::opciones() as $valor => $texto)
+                                <option value="{{ $valor }}">{{ $texto }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    @if ($verPrecios)
+                        <div class="campo">
+                            <label for="precio_unitario">Precio con IVA <span class="tenue">(por hora si se cobra por hora)</span></label>
+                            <input type="number" id="precio_unitario" name="precio_unitario" step="0.01" min="0">
+                        </div>
+                    @endif
+                </div>
+
+                <p id="aviso-repetido" class="aviso alerta" hidden>
+                    Este servicio ya está en la orden. Si es el mismo trabajo, mejor cambia la cantidad del que ya existe.
+                    Si es otro (por ejemplo, en otra pieza del auto), puedes agregarlo.
+                </p>
+                <label id="casilla-sugeridas" class="casilla campo" hidden>
+                    <input type="checkbox" name="agregar_sugeridas" value="1" checked> Agregar las refacciones que normalmente lleva el servicio
+                </label>
                 <button class="boton">Agregar trabajo</button>
             </form>
         @endif
@@ -201,15 +253,22 @@
         <h2>Refacciones utilizadas</h2>
         <div class="tabla-scroll">
             <table>
-                <thead><tr><th>Pieza</th><th class="derecha">Cantidad</th>@if ($verPrecios)<th class="derecha">Precio</th><th class="derecha">Importe</th>@endif<th></th></tr></thead>
+                <thead><tr><th>Pieza</th><th>Para el trabajo</th><th class="derecha">Cantidad</th>@if ($verPrecios)<th class="derecha">Precio</th><th class="derecha">Importe</th>@endif<th></th></tr></thead>
                 <tbody>
                 @forelse ($orden->refacciones as $r)
                     <tr>
                         <td>{{ $r->descripcion }} @if ($r->numero_parte)<span class="tenue chico">· {{ $r->numero_parte }}</span>@endif
                             @if ($r->proporcionada_por_cliente)<span class="etiqueta">la trajo el cliente</span>@endif</td>
+                        <td class="chico">{{ $r->trabajo?->descripcion ?? '—' }}</td>
                         <td class="derecha">{{ (float) $r->cantidad }}</td>
                         @if ($verPrecios)
-                            <td class="derecha">{{ $dinero($r->precio_unitario) }}</td>
+                            <td class="derecha">
+                                @if ($r->precio_unitario === null && $puedeTrabajar)
+                                    @include('ordenes._falta_precio', ['accion' => route('refacciones-usadas.precio', $r)])
+                                @else
+                                    {{ $dinero($r->precio_unitario) }}
+                                @endif
+                            </td>
                             <td class="derecha">{{ $dinero($r->importe) }}</td>
                         @endif
                         <td>
@@ -222,7 +281,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="tenue">Aún no se registran refacciones.</td></tr>
+                    <tr><td colspan="6" class="tenue">Aún no se registran refacciones.</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -232,33 +291,49 @@
             <form method="POST" action="{{ route('refacciones-usadas.store', $orden) }}" style="margin-top: 1rem;">
                 @csrf
                 <h3>Agregar refacción</h3>
+                <p class="tenue chico">Si la pieza ya está en la orden para el mismo trabajo, se suma a ese renglón.</p>
                 <div class="rejilla">
                     <div class="campo">
-                        <label for="refaccion_id">Del catálogo</label>
-                        <select id="refaccion_id" name="refaccion_id">
-                            <option value="">— Otra (escríbela abajo) —</option>
+                        <label for="refaccion_id">Refacción</label>
+                        <select id="refaccion_id" name="refaccion_id" required data-otro="#refaccion-otra" data-valor-otro="otra">
+                            <option value="">Elige una refacción…</option>
                             @foreach ($refaccionesCatalogo as $rc)
                                 <option value="{{ $rc->id }}">{{ $rc->descripcion }} @if ($rc->marca)· {{ $rc->marca }}@endif</option>
                             @endforeach
+                            <option value="otra">Otra refacción (escribirla)…</option>
                         </select>
                     </div>
                     <div class="campo">
-                        <label for="ref_descripcion">Descripción <span class="tenue">(si no está en el catálogo)</span></label>
-                        <input type="text" id="ref_descripcion" name="descripcion">
-                    </div>
-                    <div class="campo">
                         <label for="ref_cantidad">Cantidad</label>
-                        <input type="number" id="ref_cantidad" name="cantidad" step="0.001" min="0.001" value="1" required>
+                        <input type="number" id="ref_cantidad" name="cantidad" step="any" min="0.001" value="1" required>
                     </div>
                     <div class="campo">
                         <label for="orden_servicio_item_id">Para el trabajo</label>
                         <select id="orden_servicio_item_id" name="orden_servicio_item_id">
-                            <option value="">—</option>
+                            <option value="">— Ninguno en particular —</option>
                             @foreach ($orden->trabajos as $t)
                                 <option value="{{ $t->id }}">{{ $t->descripcion }}</option>
                             @endforeach
                         </select>
                     </div>
+                </div>
+
+                {{-- Solo aparece al elegir "Otra refacción" --}}
+                <div id="refaccion-otra" class="rejilla" hidden>
+                    <div class="campo">
+                        <label for="ref_descripcion">Nombre de la pieza</label>
+                        <input type="text" id="ref_descripcion" name="descripcion" maxlength="200" data-requerido>
+                    </div>
+                    <div class="campo">
+                        <label for="ref_numero_parte">Número de parte <span class="tenue">(opcional)</span></label>
+                        <input type="text" id="ref_numero_parte" name="numero_parte" maxlength="50">
+                    </div>
+                    @if ($verPrecios)
+                        <div class="campo">
+                            <label for="ref_precio">Precio unitario con IVA</label>
+                            <input type="number" id="ref_precio" name="precio_unitario" step="0.01" min="0">
+                        </div>
+                    @endif
                 </div>
                 <label class="casilla campo"><input type="checkbox" name="proporcionada_por_cliente" value="1"> La trajo el cliente</label>
                 <button class="boton">Agregar refacción</button>
@@ -271,7 +346,7 @@
         <div class="tarjeta" style="max-width: 360px; margin-left: auto;">
             <table>
                 <tr><td>Subtotal</td><td class="derecha">{{ $dinero($orden->subtotal) }}</td></tr>
-                <tr><td>Descuento</td><td class="derecha">{{ $dinero($orden->descuento) }}</td></tr>
+                <tr><td>Descuento @if ($orden->descuento_porcentaje !== null)<span class="tenue chico">({{ (float) $orden->descuento_porcentaje }} %)</span>@endif</td><td class="derecha">{{ $dinero($orden->descuento) }}</td></tr>
                 <tr><td><strong>Total</strong> <span class="tenue chico">(IVA incluido)</span></td><td class="derecha"><strong>{{ $dinero($orden->total) }}</strong></td></tr>
             </table>
         </div>
@@ -290,3 +365,52 @@
         @endforeach
     </div>
 @endsection
+
+@push('scripts')
+<script>
+    // Selectores con opción "Otro/Otra": muestra los campos para escribirlo solo cuando se elige esa opción.
+    // Los campos ocultos se desactivan para que no se envíen con datos viejos.
+    document.querySelectorAll('select[data-otro]').forEach(function (select) {
+        const grupo = document.querySelector(select.dataset.otro);
+
+        function actualizar() {
+            const esOtro = select.value === select.dataset.valorOtro;
+            grupo.hidden = ! esOtro;
+            grupo.querySelectorAll('input, select').forEach(function (campo) { campo.disabled = ! esOtro; });
+            grupo.querySelectorAll('[data-requerido]').forEach(function (campo) { campo.required = esOtro; });
+        }
+
+        select.addEventListener('change', function () {
+            actualizar();
+            if (select.value === select.dataset.valorOtro) {
+                grupo.querySelector('input').focus();
+            }
+        });
+        actualizar();
+    });
+
+    // Al elegir un servicio: avisa si ya está en la orden y decide la casilla de refacciones sugeridas.
+    (function () {
+        const servicio = document.getElementById('servicio_id');
+        if (! servicio) return;
+
+        const aviso = document.getElementById('aviso-repetido');
+        const casilla = document.getElementById('casilla-sugeridas');
+        const marcar = casilla.querySelector('input');
+
+        function actualizar() {
+            const opcion = servicio.selectedOptions[0];
+            const yaEsta = opcion.hasAttribute('data-ya-esta');
+            const tieneSugeridas = Number(opcion.dataset.sugeridas || 0) > 0;
+
+            aviso.hidden = ! yaEsta;
+            casilla.hidden = ! tieneSugeridas;
+            // Si el servicio se repite, no duplicamos sus piezas a menos que lo pidan.
+            marcar.checked = tieneSugeridas && ! yaEsta;
+        }
+
+        servicio.addEventListener('change', actualizar);
+        actualizar();
+    })();
+</script>
+@endpush

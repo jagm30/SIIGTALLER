@@ -3,7 +3,7 @@
 @section('titulo', 'Preferencias')
 
 @php
-    $nombresGrupo = ['precios' => 'Precios', 'recepcion' => 'Recepción', 'entrega' => 'Entrega', 'recordatorios' => 'Próximo servicio', 'general' => 'General'];
+    $nombresGrupo = ['precios' => 'Precios', 'trabajos' => 'Trabajos y mecánicos', 'recepcion' => 'Recepción', 'entrega' => 'Entrega', 'recordatorios' => 'Próximo servicio', 'general' => 'General'];
 @endphp
 
 @section('contenido')
