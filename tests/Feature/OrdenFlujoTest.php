@@ -102,6 +102,29 @@ class OrdenFlujoTest extends TestCase
         $this->actingAs($this->admin)->get(route('ordenes.show', $orden))->assertOk()->assertSee('Entregado')->assertDontSee('Agregar trabajo');
     }
 
+    public function test_diagnostico_no_se_puede_editar_en_estado_recibido(): void
+    {
+        $orden = $this->ordenConRecepcion($this->recepcion);
+        $orden->update(['mecanico_responsable_id' => $this->mecanico->id]);
+        $this->assertSame(\App\Enums\EstadoOrden::Recibido, $orden->estado);
+
+        // Recepción intenta guardar el diagnóstico antes de que el mecánico empiece
+        $this->actingAs($this->recepcion)
+            ->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado'])
+            ->assertSessionHas('ok');
+
+        // El diagnóstico debe seguir vacío: el campo fue ignorado por el servidor
+        $this->assertNull($orden->fresh()->diagnostico);
+
+        // Una vez en fase de diagnóstico, sí se puede guardar
+        $orden->cambiarEstado(\App\Enums\EstadoOrden::Diagnostico, $this->mecanico);
+        $this->actingAs($this->mecanico)
+            ->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado'])
+            ->assertSessionHas('ok');
+
+        $this->assertSame('Aceite degradado', $orden->fresh()->diagnostico);
+    }
+
     public function test_no_se_puede_diagnosticar_sin_recepcion_completa(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');

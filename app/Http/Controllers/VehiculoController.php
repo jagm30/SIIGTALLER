@@ -129,7 +129,22 @@ class VehiculoController extends Controller
      */
     private function datosDelVehiculo(VehiculoRequest $request): array
     {
-        $datos = $request->safe()->except(['nuevo_modelo', 'nueva_marca', 'tipo_carroceria']);
+        $datos = $request->safe()->except([
+            'nuevo_modelo', 'nueva_marca', 'tipo_carroceria',
+            'nuevo_cliente_nombre', 'nuevo_cliente_apellidos', 'nuevo_cliente_telefono',
+        ]);
+
+        if ($request->filled('nuevo_cliente_nombre')) {
+            abort_unless($request->user()->tienePermiso('clientes.gestionar'), 403);
+
+            $cliente = Cliente::create([
+                'nombre' => trim($request->input('nuevo_cliente_nombre')),
+                'apellidos' => $request->filled('nuevo_cliente_apellidos') ? trim($request->input('nuevo_cliente_apellidos')) : null,
+                'telefono' => trim($request->input('nuevo_cliente_telefono')),
+            ]);
+
+            $datos['cliente_id'] = $cliente->id;
+        }
 
         if ($request->filled('nuevo_modelo')) {
             abort_unless($request->user()->tienePermiso('catalogos.alta_rapida'), 403);

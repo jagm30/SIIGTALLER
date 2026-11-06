@@ -213,24 +213,45 @@
     </form>
 
     {{-- Fotos por ángulo --}}
-    <form method="POST" action="{{ route('inspecciones.fotos', $inspeccion) }}" enctype="multipart/form-data" class="tarjeta" data-guarda-avance>
-        @csrf
-        <h2>4. Fotos del vehículo</h2>
-        <p class="ayuda">En la tableta, cada botón abre la cámara. Puedes tomar varias y guardarlas juntas.</p>
-        <div class="fotos">
-            @foreach ($angulos as $angulo)
-                <figure>
-                    @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
-                        <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
-                    @endif
-                    <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
-                        <br><span class="tenue">{{ $angulo->descripcion }}</span></figcaption>
-                    <input type="file" name="fotos[{{ $angulo->id }}]" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
-                </figure>
-            @endforeach
+    @if ($inspeccion->firma)
+        {{-- Solo lectura: el cliente ya firmó, las fotos no se pueden cambiar --}}
+        <div class="tarjeta">
+            <h2>4. Fotos del vehículo</h2>
+            <div class="aviso alerta" style="margin-bottom: .75rem;">
+                El cliente ya firmó. Las fotos quedaron registradas y no se pueden modificar.
+            </div>
+            <div class="fotos">
+                @foreach ($angulos as $angulo)
+                    <figure>
+                        @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
+                            <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
+                        @endif
+                        <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
+                            <br><span class="tenue">{{ $angulo->descripcion }}</span></figcaption>
+                    </figure>
+                @endforeach
+            </div>
         </div>
-        <p style="margin-top: .75rem;"><button class="boton">Subir fotos seleccionadas</button></p>
-    </form>
+    @else
+        <form method="POST" action="{{ route('inspecciones.fotos', $inspeccion) }}" enctype="multipart/form-data" class="tarjeta" data-guarda-avance>
+            @csrf
+            <h2>4. Fotos del vehículo</h2>
+            <p class="ayuda">En la tableta, cada botón abre la cámara. Puedes tomar varias y guardarlas juntas.</p>
+            <div class="fotos">
+                @foreach ($angulos as $angulo)
+                    <figure>
+                        @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
+                            <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
+                        @endif
+                        <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
+                            <br><span class="tenue">{{ $angulo->descripcion }}</span></figcaption>
+                        <input type="file" name="fotos[{{ $angulo->id }}]" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
+                    </figure>
+                @endforeach
+            </div>
+            <p style="margin-top: .75rem;"><button class="boton">Subir fotos seleccionadas</button></p>
+        </form>
+    @endif
 
     {{-- Daños --}}
     <div class="tarjeta">
@@ -358,6 +379,29 @@
 
 @push('scripts')
 <script>
+    // Restaura la posición de scroll después de cualquier guardado de avance.
+    (function () {
+        const CLAVE = 'scroll:' + location.pathname;
+
+        const y = sessionStorage.getItem(CLAVE);
+        if (y !== null) {
+            sessionStorage.removeItem(CLAVE);
+            // requestAnimationFrame espera a que el DOM esté pintado antes de desplazarse.
+            requestAnimationFrame(() => window.scrollTo(0, +y));
+        }
+
+        // Formularios normales (Guardar avance, Guardar y completar).
+        document.addEventListener('submit', function () {
+            sessionStorage.setItem(CLAVE, window.scrollY);
+        });
+
+        // form.submit() no dispara el evento submit; se expone esta función
+        // para que el manejador de guarda-avance la llame antes de form.submit().
+        window.__scrollGuardar = function () {
+            sessionStorage.setItem(CLAVE, window.scrollY);
+        };
+    })();
+
     // Firma con el dedo o el mouse, sin librerías: dibuja en un <canvas> y lo envía como imagen PNG.
     (function () {
         const lienzo = document.getElementById('lienzo-firma');
@@ -431,7 +475,8 @@
                         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                     });
                 } finally {
-                    form.submit(); // submit() no vuelve a disparar este evento
+                    window.__scrollGuardar(); // submit() no vuelve a disparar el evento submit
+                    form.submit();
                 }
             });
         });
@@ -510,6 +555,42 @@
         });
 
         contar();
+    })();
+    // ── Vista previa de fotos ────────────────────────────────────
+    // Al elegir una foto (cámara o galería) la muestra de inmediato en el recuadro,
+    // sin esperar a presionar "Subir fotos". Borde verde + ✓ confirman la selección.
+    (function () {
+        document.querySelectorAll('.fotos input[type=file]').forEach(function (input) {
+            input.addEventListener('change', function () {
+                const fig = input.closest('figure');
+                const archivo = input.files && input.files[0];
+                const fotoGuardada = fig.querySelector('a');
+                let preview = fig.querySelector('.foto-preview');
+
+                if (!archivo) {
+                    // El usuario canceló: volver al estado anterior
+                    if (preview) preview.remove();
+                    if (fotoGuardada) fotoGuardada.hidden = false;
+                    fig.classList.remove('con-preview');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    if (!preview) {
+                        preview = document.createElement('img');
+                        preview.className = 'foto-preview';
+                        preview.alt = 'Vista previa';
+                        fig.prepend(preview);
+                    }
+                    preview.src = e.target.result;
+                    // Ocultar la foto guardada para que la vista previa ocupe su lugar
+                    if (fotoGuardada) fotoGuardada.hidden = true;
+                    fig.classList.add('con-preview');
+                };
+                reader.readAsDataURL(archivo);
+            });
+        });
     })();
 </script>
 @endpush

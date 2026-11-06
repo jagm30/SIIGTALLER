@@ -29,8 +29,13 @@ class VehiculoRequest extends FormRequest
         $vehiculo = $this->route('vehiculo');
         $nuevoModelo = $this->filled('nuevo_modelo');
 
+        $nuevoCliente = $this->filled('nuevo_cliente_nombre');
+
         return [
-            'cliente_id' => ['required', 'exists:clientes,id'],
+            'cliente_id' => [Rule::requiredIf(! $nuevoCliente), 'nullable', 'exists:clientes,id'],
+            'nuevo_cliente_nombre' => ['nullable', 'string', 'max:150'],
+            'nuevo_cliente_apellidos' => ['nullable', 'string', 'max:150'],
+            'nuevo_cliente_telefono' => [Rule::requiredIf($nuevoCliente), 'nullable', 'string', 'max:20'],
             'modelo_vehiculo_id' => [Rule::requiredIf(! $nuevoModelo), 'nullable', 'exists:modelos_vehiculo,id'],
 
             // Alta rápida de un modelo que no está en el catálogo
@@ -57,6 +62,8 @@ class VehiculoRequest extends FormRequest
     {
         return [
             'cliente_id' => 'cliente',
+            'nuevo_cliente_nombre' => 'nombre del cliente nuevo',
+            'nuevo_cliente_telefono' => 'teléfono del cliente nuevo',
             'modelo_vehiculo_id' => 'modelo',
             'nueva_marca' => 'marca',
             'tipo_carroceria' => 'tipo de carrocería',

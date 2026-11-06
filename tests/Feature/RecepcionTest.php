@@ -230,6 +230,27 @@ class RecepcionTest extends TestCase
         Storage::disk('local')->assertMissing($primera);
     }
 
+    public function test_no_se_pueden_subir_fotos_despues_de_que_el_cliente_firmo(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $inspeccion = $orden->recepcion;
+        $angulo = AnguloFoto::firstOrFail();
+
+        // Antes de firmar: se puede subir foto sin problema
+        $this->actingAs($this->recepcion)
+            ->post(route('inspecciones.fotos', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('antes.jpg')]])
+            ->assertSessionHas('ok');
+
+        // El cliente firma
+        $this->adjuntoFalso($inspeccion, \App\Enums\TipoAdjunto::Firma);
+
+        // Después de firmar: se bloquea
+        $this->post(route('inspecciones.fotos', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('despues.jpg')]])
+            ->assertSessionHas('error');
+
+        $this->assertSame(1, $inspeccion->fotos()->count(), 'Solo debe existir la foto subida antes de la firma');
+    }
+
     public function test_las_fotos_solo_las_ve_quien_puede_ver_la_orden(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');

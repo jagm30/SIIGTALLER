@@ -145,6 +145,10 @@ class OrdenServicioController extends Controller
         if (! $user->can('precios.ver', $orden)) {
             unset($datos['descuento']);
         }
+        // El diagnóstico solo se puede editar a partir de la fase de diagnóstico.
+        if (! $orden->puedeEditarDiagnostico()) {
+            unset($datos['diagnostico']);
+        }
 
         $tipoDescuento = $datos['descuento_tipo'] ?? 'monto';
         unset($datos['descuento_tipo']);

@@ -246,6 +246,15 @@ class OrdenServicio extends Model
     }
 
     /**
+     * El diagnóstico solo se escribe una vez que el mecánico empieza a inspeccionar.
+     * Mientras la orden está en "Recibido" aún no hay diagnóstico que registrar.
+     */
+    public function puedeEditarDiagnostico(): bool
+    {
+        return $this->estado !== EstadoOrden::Recibido && ! $this->estaCerrada();
+    }
+
+    /**
      * Cambia el estado validando el ciclo de vida, el rol y las reglas de recepción/entrega,
      * y deja el registro en la bitácora.
      *

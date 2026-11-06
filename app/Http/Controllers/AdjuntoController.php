@@ -31,6 +31,10 @@ class AdjuntoController extends Controller
     {
         $this->autorizarCaptura($request->user(), $inspeccion);
 
+        if ($inspeccion->firma()->exists()) {
+            return back()->with('error', 'El cliente ya firmó. No se pueden agregar fotos después de la firma.');
+        }
+
         $request->validate([
             'fotos' => ['required', 'array'],
             'fotos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'], // 10 MB

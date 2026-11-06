@@ -114,6 +114,52 @@ class ClientesYVehiculosTest extends TestCase
         $this->actingAs($this->usuario(Rol::Administrador))->get('/marcas')->assertSee('Por verificar')->assertSee('Dolphin');
     }
 
+    public function test_registra_vehiculo_con_cliente_nuevo_desde_el_formulario(): void
+    {
+        $aveo = ModeloVehiculo::where('nombre', 'Aveo')->firstOrFail();
+
+        $this->actingAs($this->recepcion)->post('/vehiculos', [
+            'modelo_vehiculo_id' => $aveo->id,
+            'nuevo_cliente_nombre' => 'Laura',
+            'nuevo_cliente_apellidos' => 'Torres',
+            'nuevo_cliente_telefono' => '9610000099',
+            'placas' => 'ABC-12-34',
+        ])->assertRedirect();
+
+        $this->assertSame(1, Cliente::count(), 'Debe crearse exactamente un cliente');
+        $cliente = Cliente::firstOrFail();
+        $this->assertSame('Laura', $cliente->nombre);
+        $this->assertSame('Torres', $cliente->apellidos);
+        $this->assertSame('9610000099', $cliente->telefono);
+
+        $vehiculo = Vehiculo::firstOrFail();
+        $this->assertSame($cliente->id, $vehiculo->cliente_id);
+    }
+
+    public function test_cliente_nuevo_requiere_telefono(): void
+    {
+        $aveo = ModeloVehiculo::where('nombre', 'Aveo')->firstOrFail();
+
+        $this->actingAs($this->recepcion)->post('/vehiculos', [
+            'modelo_vehiculo_id' => $aveo->id,
+            'nuevo_cliente_nombre' => 'Sin Telefono',
+        ])->assertSessionHasErrors('nuevo_cliente_telefono');
+
+        $this->assertSame(0, Cliente::count());
+    }
+
+    public function test_sin_cliente_ni_cliente_nuevo_falla_la_validacion(): void
+    {
+        $aveo = ModeloVehiculo::where('nombre', 'Aveo')->firstOrFail();
+
+        $this->actingAs($this->recepcion)->post('/vehiculos', [
+            'modelo_vehiculo_id' => $aveo->id,
+            'placas' => 'XYZ-00-00',
+        ])->assertSessionHasErrors('cliente_id');
+
+        $this->assertSame(0, Vehiculo::count());
+    }
+
     public function test_cambiar_de_dueno_conserva_el_historial(): void
     {
         $vehiculo = $this->vehiculo();

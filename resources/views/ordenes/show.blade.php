@@ -6,6 +6,7 @@
     $user = auth()->user();
     $verPrecios = $user->can('precios.ver', $orden);
     $editable = ! $orden->estaCerrada();
+    $editableDiagnostico = $orden->puedeEditarDiagnostico();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
     // Botones de estado: solo los siguientes pasos que el rol de este usuario puede dar.
     $siguientes = collect($orden->estado->siguientes())->filter(fn ($e) => $user->tieneRol(...$e->rolesQuePuedenEntrar()));
@@ -95,11 +96,12 @@
                         @php($enPorcentaje = old('descuento_tipo', $orden->descuento_porcentaje !== null ? 'porcentaje' : 'monto') === 'porcentaje')
                         <label for="descuento">Descuento</label>
                         <div class="fila" style="flex-wrap: nowrap;">
-                            <select name="descuento_tipo" aria-label="Tipo de descuento" style="width: auto;" @disabled(! $editable)>
+                            <select name="descuento_tipo" aria-label="Tipo de descuento" style="width: auto; flex-shrink: 0;" @disabled(! $editable)>
                                 <option value="monto" @selected(! $enPorcentaje)>$</option>
                                 <option value="porcentaje" @selected($enPorcentaje)>%</option>
                             </select>
                             <input type="number" step="0.01" min="0" id="descuento" name="descuento" @disabled(! $editable)
+                                   style="flex: 1; min-width: 0;"
                                    value="{{ old('descuento', $enPorcentaje ? (float) $orden->descuento_porcentaje : $orden->descuento) }}">
                         </div>
                     </div>
@@ -108,7 +110,10 @@
         </div>
         <div class="campo">
             <label for="diagnostico">Diagnóstico del mecánico</label>
-            <textarea id="diagnostico" name="diagnostico" @disabled(! $editable)>{{ old('diagnostico', $orden->diagnostico) }}</textarea>
+            <textarea id="diagnostico" name="diagnostico" @disabled(! $editableDiagnostico)>{{ old('diagnostico', $orden->diagnostico) }}</textarea>
+            @unless ($editableDiagnostico || $orden->estaCerrada())
+                <p class="ayuda">Disponible a partir de la fase de diagnóstico.</p>
+            @endunless
         </div>
         <div class="campo">
             <label for="observaciones">Observaciones</label>

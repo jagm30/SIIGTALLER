@@ -87,7 +87,9 @@
     .opciones input:focus-visible + span { outline: 2px solid var(--primario); outline-offset: 2px; }
 
     .fotos { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-    .fotos figure { margin: 0; background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .4rem; }
+    .fotos figure { margin: 0; background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .4rem; transition: border-color .2s, background .2s; }
+    .fotos figure.con-preview { border-color: var(--exito); background: #edf7f1; }
+    .fotos figure.con-preview figcaption strong::after { content: ' ✓'; color: var(--exito); }
     .fotos img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block; }
     .fotos figcaption { font-size: .8rem; margin-top: .25rem; }
 
@@ -120,15 +122,15 @@
     .matriz .requerido { color: var(--peligro); font-weight: 700; }
     .matriz tr.contestado .requerido { color: var(--tenue); font-weight: 400; }
     .matriz .cabecera th { padding-bottom: .1rem; }
-    .matriz .cabecera button { width: 100%; min-height: 34px; padding: .2rem .25rem; border: 1px solid var(--borde); border-radius: 6px; background: #f4f5f7;
-        font: inherit; font-size: .78rem; font-weight: 600; color: var(--texto); cursor: pointer; }
-    .matriz .titulo-columna { display: block; text-align: center; font-size: .78rem; font-weight: 600; color: var(--tenue); }
+    .matriz .cabecera button { width: 100%; min-height: 44px; padding: .3rem .4rem; border: 1px solid var(--borde); border-radius: 6px; background: #f4f5f7;
+        font: inherit; font-size: .875rem; font-weight: 600; color: var(--texto); cursor: pointer; }
+    .matriz .titulo-columna { display: block; text-align: center; font-size: .875rem; font-weight: 600; color: var(--tenue); }
     .matriz .cabecera button:active { background: var(--primario); color: #fff; }
-    .matriz .celda { width: 48px; text-align: center; }
-    .matriz .celda label { display: flex; align-items: center; justify-content: center; height: 42px; margin: 0; cursor: pointer; }
+    .matriz .celda { width: 60px; text-align: center; }
+    .matriz .celda label { display: flex; align-items: center; justify-content: center; height: 52px; margin: 0; cursor: pointer; }
     .matriz .celda input { position: absolute; opacity: 0; }
-    .matriz .marca { width: 24px; height: 24px; border: 2px solid #b8bfc8; border-radius: 50%; background: #fff; }
-    .matriz .celda input:checked + .marca { border-color: var(--primario); background: var(--primario); box-shadow: inset 0 0 0 4px #fff; }
+    .matriz .marca { width: 32px; height: 32px; border: 2px solid #b8bfc8; border-radius: 50%; background: #fff; }
+    .matriz .celda input:checked + .marca { border-color: var(--primario); background: var(--primario); box-shadow: inset 0 0 0 5px #fff; }
     .matriz .celda input:checked + .marca[data-valor="regular"] { border-color: var(--alerta); background: var(--alerta); }
     .matriz .celda input:checked + .marca[data-valor="malo"] { border-color: var(--peligro); background: var(--peligro); }
     .matriz .celda input:focus-visible + .marca { outline: 2px solid var(--primario); outline-offset: 2px; }
