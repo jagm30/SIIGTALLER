@@ -24,8 +24,10 @@
                     <td>{{ $s->tipo_cobro->label() }}</td>
                     @can('precios.ver')<td class="derecha">{{ $s->precio !== null ? '$' . number_format($s->precio, 2) : '—' }}@if ($s->tipo_cobro === \App\Enums\TipoCobro::PorHora && $s->precio !== null)/h @endif</td>@endcan
                     <td class="ocultar-movil chico">
-                        @if ($s->generaRecordatorio())
-                            {{ $s->intervalo_meses ? $s->intervalo_meses . ' meses' : '' }}{{ $s->intervalo_meses && $s->intervalo_km ? ' o ' : '' }}{{ $s->intervalo_km ? number_format($s->intervalo_km) . ' km' : '' }}
+                        @php([$meses, $km] = $s->intervaloRecordatorio())
+                        @if ($meses || $km)
+                            {{ $meses ? $meses . ' meses' : '' }}{{ $meses && $km ? ' o ' : '' }}{{ $km ? number_format($km) . ' km' : '' }}
+                            @unless ($s->tieneIntervaloPropio())<br><span class="tenue">(general)</span>@endunless
                         @else — @endif
                     </td>
                     <td class="derecha"><a href="{{ route('servicios.edit', $s) }}">Editar</a></td>

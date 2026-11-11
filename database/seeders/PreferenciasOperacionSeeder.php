@@ -32,8 +32,8 @@ class PreferenciasOperacionSeeder extends Seeder
         ['recepcion', 'recepcion_terminos_version', 'int', '1', 'Se incrementa cada vez que cambia el texto de los términos.'],
         ['entrega', 'entrega_inspeccion_obligatoria', 'bool', '1', 'Exige la inspección de entrega completada antes de marcar la orden como entregada.'],
         ['recordatorios', 'recordatorios_activos', 'bool', '1', 'Programa el próximo servicio al entregar el vehículo.'],
-        ['recordatorios', 'recordatorio_meses_default', 'int', '6', 'Intervalo sugerido en meses.'],
-        ['recordatorios', 'recordatorio_km_default', 'int', '10000', 'Intervalo sugerido en kilómetros.'],
+        ['recordatorios', 'recordatorio_meses_default', 'int', '6', 'Meses para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin fecha).'],
+        ['recordatorios', 'recordatorio_km_default', 'int', '10000', 'Kilómetros para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin km).'],
     ];
 
     public function run(): void

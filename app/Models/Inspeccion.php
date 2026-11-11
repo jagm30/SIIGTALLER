@@ -209,6 +209,12 @@ class Inspeccion extends Model
     /** @return list<string> lo que falta, en lenguaje de recepción. Vacío = se puede completar. */
     public function faltantes(): array
     {
+        // La entrega no repite el checklist: el estado del vehículo quedó en la recepción y
+        // solo se agregan observaciones finales, que son opcionales.
+        if (! $this->esRecepcion()) {
+            return [];
+        }
+
         $f = [];
         $orden = $this->orden;
         $vehiculo = $orden->vehiculo;
@@ -317,13 +323,13 @@ class Inspeccion extends Model
         return DB::transaction(function () {
             $sucursal = $this->orden->sucursal_id;
 
-            $this->update([
-                'estado' => EstadoInspeccion::Completada,
-                'completada_at' => now(),
-                'firmado_at' => $this->firmado_at ?? now(),
-                'terminos_version' => $this->terminos_version
-                    ?? PreferenciaOperacion::int('recepcion_terminos_version', $sucursal, 1),
-            ]);
+            $this->update(['estado' => EstadoInspeccion::Completada, 'completada_at' => now()]
+                // Solo la recepción lleva firma y términos.
+                + ($this->esRecepcion() ? [
+                    'firmado_at' => $this->firmado_at ?? now(),
+                    'terminos_version' => $this->terminos_version
+                        ?? PreferenciaOperacion::int('recepcion_terminos_version', $sucursal, 1),
+                ] : []));
 
             // La recepción actualiza los datos vivos del vehículo.
             if ($this->esRecepcion()) {

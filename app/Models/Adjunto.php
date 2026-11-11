@@ -85,7 +85,8 @@ class Adjunto extends Model
 
     /**
      * La imagen como data URI para incrustarla en un PDF. Con $ancho se reduce a una miniatura
-     * JPEG 4:3 para que el PDF no cargue fotos de varios MB. Null si el archivo ya no está en disco.
+     * JPEG 4:3 (la foto completa, sin recortar) para que el PDF no cargue fotos de varios MB.
+     * Null si el archivo ya no está en disco o no se puede leer.
      */
     public function dataUri(?int $ancho = null): ?string
     {
@@ -99,14 +100,22 @@ class Adjunto extends Model
             return 'data:' . $this->mime . ';base64,' . base64_encode($contenido);
         }
 
-        $imagen = $this->enderezar(imagecreatefromstring($contenido), $contenido);
+        $imagen = self::sinAvisosDeFormato(fn () => imagecreatefromstring($contenido));
+        if ($imagen === false) {
+            return null; // archivo dañado: la hoja muestra "Archivo no disponible"
+        }
+        $imagen = $this->enderezar($imagen, $contenido);
 
-        // Recorte centrado a 4:3 para que todas las miniaturas midan lo mismo en la hoja.
+        // La foto completa, sin recortar, centrada en un recuadro blanco 4:3:
+        // así todas las miniaturas miden lo mismo en la hoja aunque haya fotos verticales.
+        $alto = (int) round($ancho * 3 / 4);
         [$w, $h] = [imagesx($imagen), imagesy($imagen)];
-        $recorteW = min($w, (int) round($h * 4 / 3));
-        $recorteH = min($h, (int) round($w * 3 / 4));
-        $imagen = imagecrop($imagen, ['x' => intdiv($w - $recorteW, 2), 'y' => intdiv($h - $recorteH, 2), 'width' => $recorteW, 'height' => $recorteH]);
-        $miniatura = imagescale($imagen, min($ancho, $recorteW));
+        $escala = min($ancho / $w, $alto / $h, 1);
+        [$nuevoW, $nuevoH] = [max(1, (int) round($w * $escala)), max(1, (int) round($h * $escala))];
+
+        $miniatura = imagecreatetruecolor($ancho, $alto);
+        imagefill($miniatura, 0, 0, imagecolorallocate($miniatura, 255, 255, 255));
+        imagecopyresampled($miniatura, $imagen, intdiv($ancho - $nuevoW, 2), intdiv($alto - $nuevoH, 2), 0, 0, $nuevoW, $nuevoH, $w, $h);
 
         ob_start();
         imagejpeg($miniatura, null, 75);
@@ -121,7 +130,7 @@ class Adjunto extends Model
             return $imagen;
         }
 
-        $exif = exif_read_data('data://image/jpeg;base64,' . base64_encode($contenido));
+        $exif = self::sinAvisosDeFormato(fn () => exif_read_data('data://image/jpeg;base64,' . base64_encode($contenido)));
 
         return match ($exif['Orientation'] ?? 1) {
             3 => imagerotate($imagen, 180, 0),
@@ -129,6 +138,23 @@ class Adjunto extends Model
             8 => imagerotate($imagen, 90, 0),
             default => $imagen,
         };
+    }
+
+    /**
+     * Muchas fotos traen metadatos imperfectos (p. ej. "libpng warning: iCCP: known incorrect
+     * sRGB profile" o un EXIF mal cerrado). GD y EXIF las leen bien, pero avisan con un warning
+     * que Laravel convierte en excepción y tumbaría todo el PDF. Solo durante esta lectura se
+     * ignoran esos avisos; un archivo que de verdad no se puede leer sigue devolviendo false.
+     */
+    private static function sinAvisosDeFormato(callable $leer): mixed
+    {
+        set_error_handler(fn () => true, E_WARNING | E_NOTICE);
+
+        try {
+            return $leer();
+        } finally {
+            restore_error_handler();
+        }
     }
 
     /** Borra el archivo del disco junto con su registro. */

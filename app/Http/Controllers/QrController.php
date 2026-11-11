@@ -52,7 +52,7 @@ class QrController extends Controller
     {
         Gate::authorize('ver-orden', $orden);
 
-        $orden->load(['vehiculo.marca', 'vehiculo.modelo']);
+        $orden->load(['vehiculo.marca', 'vehiculo.modelo', 'recepcion']);
 
         return view('qr.imprimir', ['orden' => $orden, 'vehiculo' => $orden->vehiculo]);
     }

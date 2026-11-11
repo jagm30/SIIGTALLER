@@ -186,11 +186,11 @@ class OrdenServicioController extends Controller
         return back()->with('ok', "La orden pasó a «{$nuevo->label()}».");
     }
 
-    /** Crea (o retoma) la inspección de entrega y manda a capturarla. */
+    /** Crea (o retoma) la entrega y manda a la pantalla donde se revisa con el cliente. */
     public function iniciarEntrega(Request $request, OrdenServicio $orden): RedirectResponse
     {
         if ($orden->estado !== EstadoOrden::Terminado) {
-            return back()->with('error', 'La inspección de entrega se hace cuando la orden está terminada.');
+            return back()->with('error', 'La entrega se hace cuando la orden está terminada.');
         }
 
         $entrega = $orden->iniciarEntrega($request->user());

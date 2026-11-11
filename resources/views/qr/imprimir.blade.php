@@ -8,6 +8,9 @@
         <h1>QR para el cliente · Orden {{ $orden->folio }}</h1>
         <div class="fila">
             <button type="button" class="boton" onclick="window.print()">Imprimir QR</button>
+            @if ($orden->recepcion?->estaCompletada())
+                <a href="{{ route('inspecciones.pdf', $orden->recepcion) }}" class="boton secundario" target="_blank">Acta de recepción en PDF</a>
+            @endif
             <a href="{{ route('ordenes.show', $orden) }}" class="boton secundario">Ir a la orden</a>
         </div>
     </div>

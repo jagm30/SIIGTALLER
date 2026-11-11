@@ -29,7 +29,6 @@ class QrPublicoTest extends TestCase
         $orden->trabajos()->create(['servicio_id' => $this->servicio()->id]);
         $orden->cambiarEstado(EstadoOrden::Terminado, $mecanico);
         $entrega = $orden->iniciarEntrega($recepcion);
-        $this->llenarInspeccion($entrega, $orden->recepcion->km);
         $entrega->completar();
         $orden->cambiarEstado(EstadoOrden::Entregado, $recepcion);
         $vehiculo = $orden->vehiculo;
@@ -97,7 +96,6 @@ class QrPublicoTest extends TestCase
         $orden->refacciones()->create(['descripcion' => 'Empaque de cárter', 'cantidad' => 1]);
         $orden->cambiarEstado(EstadoOrden::Terminado, $mecanico);
         $entrega = $orden->iniciarEntrega($recepcion);
-        $this->llenarInspeccion($entrega, $orden->recepcion->km);
         $entrega->completar();
         $orden->cambiarEstado(EstadoOrden::Entregado, $recepcion);
 
@@ -123,6 +121,9 @@ class QrPublicoTest extends TestCase
             ->assertSee('<svg', false)
             ->assertSee(route('qr.show', $orden->vehiculo->qr_token))
             ->assertSee($orden->folio)
+            // Desde aquí también se abre el acta de la recepción en PDF
+            ->assertSee('Acta de recepción en PDF')
+            ->assertSee(route('inspecciones.pdf', $orden->recepcion))
             // La hoja se le entrega al cliente: sin sus datos personales
             ->assertDontSee($orden->cliente->telefono);
     }

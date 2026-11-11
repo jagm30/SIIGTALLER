@@ -64,16 +64,50 @@ class InspeccionPdfTest extends TestCase
         $this->assertStringContainsString('El cliente acepta los términos.', $html);
     }
 
-    public function test_la_miniatura_es_un_jpeg_chico_recortado_a_4_3(): void
+    public function test_la_miniatura_muestra_la_foto_completa_en_un_recuadro_4_3(): void
     {
         $orden = $this->ordenConRecepcion($this->usuario(Rol::Recepcionista));
-        Storage::disk('local')->put('pruebas/x.jpg', UploadedFile::fake()->image('x.jpg', 1200, 1600)->getContent()); // vertical
+        // Foto vertical toda roja, de punta a punta: si se recortara, no habría márgenes blancos.
+        $vertical = imagecreatetruecolor(1200, 1600);
+        imagefill($vertical, 0, 0, imagecolorallocate($vertical, 255, 0, 0));
+        ob_start();
+        imagejpeg($vertical, null, 95);
+        Storage::disk('local')->put('pruebas/x.jpg', ob_get_clean());
 
         $uri = $orden->recepcion->fotos->first()->dataUri(360);
 
         $this->assertStringStartsWith('data:image/jpeg;base64,', $uri);
-        [$ancho, $alto] = getimagesizefromstring(base64_decode(substr($uri, strlen('data:image/jpeg;base64,'))));
-        $this->assertSame([360, 270], [$ancho, $alto]);
+        $miniatura = imagecreatefromstring(base64_decode(substr($uri, strlen('data:image/jpeg;base64,'))));
+        $this->assertSame([360, 270], [imagesx($miniatura), imagesy($miniatura)]);
+
+        // 1200×1600 cabe en 270 de alto → 203 de ancho, centrada: márgenes blancos a los lados.
+        $color = fn ($x, $y) => imagecolorsforindex($miniatura, imagecolorat($miniatura, $x, $y));
+        $this->assertGreaterThan(240, $color(10, 135)['green'], 'Margen izquierdo blanco');
+        $this->assertGreaterThan(240, $color(350, 135)['green'], 'Margen derecho blanco');
+        $this->assertLessThan(30, $color(180, 135)['green'], 'La foto al centro');
+        $this->assertLessThan(30, $color(180, 2)['green'], 'Arriba no se recortó: la foto llega al borde');
+    }
+
+    public function test_una_foto_png_con_metadatos_imperfectos_no_rompe_el_pdf(): void
+    {
+        $recepcion = $this->usuario(Rol::Recepcionista);
+        $orden = $this->ordenConRecepcion($recepcion);
+        $orden->recepcion->fotos()->update(['ruta' => 'pruebas/aviso.png', 'mime' => 'image/png']);
+        Storage::disk('local')->put('pruebas/aviso.png', $this->pngConAvisoDeLibpng());
+
+        $this->assertStringStartsWith('data:image/jpeg;base64,', $orden->recepcion->fotos()->first()->dataUri(360));
+        $this->actingAs($recepcion)->get(route('inspecciones.pdf', $orden->recepcion))
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_una_foto_danada_sale_como_no_disponible_sin_romper_el_pdf(): void
+    {
+        $recepcion = $this->usuario(Rol::Recepcionista);
+        $orden = $this->ordenConRecepcion($recepcion);
+        Storage::disk('local')->put('pruebas/x.jpg', 'esto no es una imagen');
+
+        $this->assertNull($orden->recepcion->fotos()->first()->dataUri(360));
+        $this->actingAs($recepcion)->get(route('inspecciones.pdf', $orden->recepcion))->assertOk();
     }
 
     public function test_no_exporta_una_recepcion_sin_completar(): void
@@ -92,6 +126,21 @@ class InspeccionPdfTest extends TestCase
         $orden = $this->ordenConRecepcion($this->usuario(Rol::Recepcionista));
 
         $this->actingAs($this->usuario(Rol::Mecanico))->get(route('inspecciones.pdf', $orden->recepcion))->assertForbidden();
+    }
+
+    /**
+     * PNG válido con un bloque de metadatos cuyo CRC no cuadra: libpng lo descarta y avisa con
+     * un warning, igual que con "iCCP: known incorrect sRGB profile" de algunas cámaras.
+     */
+    private function pngConAvisoDeLibpng(): string
+    {
+        ob_start();
+        imagepng(imagecreatetruecolor(800, 600));
+        $png = ob_get_clean();
+        $datos = "Comment\0x";
+        $bloque = pack('N', strlen($datos)) . 'tEXt' . $datos . pack('N', 12345);
+
+        return substr($png, 0, 33) . $bloque . substr($png, 33); // 33 = firma PNG + bloque IHDR
     }
 
     public function test_la_orden_tiene_el_boton_para_exportar_el_acta(): void

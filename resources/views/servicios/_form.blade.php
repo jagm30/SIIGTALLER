@@ -32,7 +32,8 @@
         <input type="number" min="1" id="tiempo_estimado_min" name="tiempo_estimado_min" value="{{ old('tiempo_estimado_min', $servicio->tiempo_estimado_min) }}">
     </div>
 </div>
-<h3>Próximo servicio <span class="tenue chico">(déjalo vacío si este servicio no se repite)</span></h3>
+<h3>Próximo servicio</h3>
+<p class="ayuda">Si lo dejas vacío se usa el intervalo general de Preferencias ({{ \App\Models\PreferenciaOperacion::int('recordatorio_meses_default') ?: '—' }} meses o {{ number_format(\App\Models\PreferenciaOperacion::int('recordatorio_km_default')) }} km).</p>
 <div class="rejilla">
     <div class="campo">
         <label for="intervalo_meses">Cada cuántos meses</label>

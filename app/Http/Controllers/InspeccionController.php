@@ -26,8 +26,11 @@ use Illuminate\View\View;
  *   1. edit()      muestra el formulario con lo que ya se capturó y lo que falta.
  *   2. update()    guarda avance, incluidas fotos y firma (se puede salir y regresar después).
  *   3. completar() revisa que no falte nada obligatorio y cierra el acta.
- *   4. pdf()       exporta el acta completada para imprimirla o enviarla.
+ *   4. pdf()       exporta el acta de recepción completada para imprimirla o enviarla.
  * Los daños se registran con InspeccionDanioController.
+ *
+ * La entrega no repite el checklist: muestra el reporte de la recepción y solo pide
+ * observaciones finales (ver entrega()).
  */
 class InspeccionController extends Controller
 {
@@ -40,6 +43,10 @@ class InspeccionController extends Controller
         if ($inspeccion->estaCompletada()) {
             return redirect()->route('ordenes.show', $inspeccion->orden_servicio_id)
                 ->with('ok', 'Esta inspección ya está completada y no se puede modificar.');
+        }
+
+        if (! $inspeccion->esRecepcion()) {
+            return $this->entrega($inspeccion);
         }
 
         $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente',
@@ -66,6 +73,15 @@ class InspeccionController extends Controller
     public function update(InspeccionRequest $request, Inspeccion $inspeccion): RedirectResponse|JsonResponse
     {
         $this->autorizarCaptura($request->user(), $inspeccion);
+
+        // La entrega solo guarda las observaciones finales.
+        if (! $inspeccion->esRecepcion()) {
+            $inspeccion->update($request->safe()->only('observaciones'));
+
+            return $request->boolean('completar')
+                ? $this->completar($request, $inspeccion)
+                : back()->with('ok', 'Observaciones guardadas.');
+        }
 
         DB::transaction(function () use ($request, $inspeccion) {
             $inspeccion->update($request->safe()->except(['respuestas', 'fotos', 'firma']) + [
@@ -112,13 +128,14 @@ class InspeccionController extends Controller
         }
 
         return redirect()->route('ordenes.show', $inspeccion->orden_servicio_id)
-            ->with('ok', 'Inspección de entrega completada. Ya puedes marcar la orden como entregada.');
+            ->with('ok', 'Entrega completada. Ya puedes marcar la orden como entregada.');
     }
 
     /** Acta en PDF tamaño carta: hoja 1 con datos y checklist; hoja 2 con fotos, daños y firma. */
     public function pdf(Inspeccion $inspeccion): Response|RedirectResponse
     {
         Gate::authorize('ver-orden', $inspeccion->orden);
+        abort_unless($inspeccion->esRecepcion(), 404); // la entrega ya no lleva acta propia
 
         if (! $inspeccion->estaCompletada()) {
             return back()->with('error', 'El PDF se genera cuando la inspección está completada.');
@@ -138,6 +155,20 @@ class InspeccionController extends Controller
     }
 
     // ── Apoyo ────────────────────────────────────────────────────
+
+    /** Pantalla de entrega: el reporte de la recepción (solo lectura) y las observaciones finales. */
+    private function entrega(Inspeccion $entrega): View
+    {
+        $entrega->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente',
+            'orden.recepcion.respuestas.checklistItem', 'orden.recepcion.fotos.anguloFoto',
+            'orden.recepcion.danios.zona', 'orden.recepcion.realizadaPor']);
+
+        return view('inspecciones.entrega', [
+            'entrega' => $entrega,
+            'orden' => $entrega->orden,
+            'recepcion' => $entrega->orden->recepcion,
+        ]);
+    }
 
     /**
      * Guarda las respuestas del checklist. Solo acepta puntos que aplican a esta

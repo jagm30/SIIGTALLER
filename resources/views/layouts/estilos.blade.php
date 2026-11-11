@@ -87,6 +87,13 @@
     .opciones input:checked + span { background: var(--primario); border-color: var(--primario); color: #fff; }
     .opciones input:focus-visible + span { outline: 2px solid var(--primario); outline-offset: 2px; }
 
+    /* Reporte de recepción en la pantalla de entrega */
+    .reporte-checklist { display: grid; gap: .5rem 1rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; }
+    .reporte-checklist table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    .reporte-checklist th { text-align: left; background: #eef0f3; padding: .25rem .4rem; }
+    .reporte-checklist td { padding: .2rem .4rem; border-bottom: 1px solid var(--borde); }
+    .reporte-checklist .valor { text-align: right; font-weight: 600; white-space: nowrap; }
+    .reporte-checklist .malo { color: var(--peligro); }
     .fotos { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .fotos figure { margin: 0; background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .4rem; transition: border-color .2s, background .2s; }
     .fotos figure.con-preview { border-color: var(--exito); background: #edf7f1; }

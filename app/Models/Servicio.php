@@ -59,8 +59,27 @@ class Servicio extends Model
         return $query->where('activo', true)->orderBy('nombre');
     }
 
-    public function generaRecordatorio(): bool
+    public function tieneIntervaloPropio(): bool
     {
         return $this->intervalo_meses !== null || $this->intervalo_km !== null;
+    }
+
+    /**
+     * Cada cuánto se repite: el intervalo propio del servicio o, si no tiene, el general
+     * de Preferencias (recordatorio_meses_default / recordatorio_km_default).
+     * Un valor general en 0 o vacío significa "sin límite por ese lado".
+     *
+     * @return array{0: ?int, 1: ?int} [meses, km]
+     */
+    public function intervaloRecordatorio(?int $sucursalId = null): array
+    {
+        if ($this->tieneIntervaloPropio()) {
+            return [$this->intervalo_meses, $this->intervalo_km];
+        }
+
+        return [
+            PreferenciaOperacion::int('recordatorio_meses_default', $sucursalId) ?: null,
+            PreferenciaOperacion::int('recordatorio_km_default', $sucursalId) ?: null,
+        ];
     }
 }

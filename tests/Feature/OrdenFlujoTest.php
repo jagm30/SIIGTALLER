@@ -74,14 +74,14 @@ class OrdenFlujoTest extends TestCase
 
         // No se entrega sin la inspección de entrega (preferencia obligatoria)
         $this->actingAs($this->recepcion)->post(route('ordenes.estado', $orden), ['estado' => 'entregado'])
-            ->assertSessionHasErrors(['estado' => 'La inspección de entrega no está completada.']);
+            ->assertSessionHasErrors(['estado' => 'Falta completar la entrega (observaciones finales).']);
 
-        // Inspección de entrega
+        // Entrega con el cliente: solo observaciones finales, sin volver a llenar el checklist
         $this->post(route('ordenes.entrega', $orden))->assertRedirect();
         $entrega = $orden->fresh()->entrega;
         $this->assertSame(TipoInspeccion::Entrega, $entrega->tipo);
-        $this->llenarInspeccion($entrega, $orden->recepcion->km + 5);
-        $this->post(route('inspecciones.completar', $entrega))->assertRedirect(route('ordenes.show', $orden));
+        $this->put(route('inspecciones.update', $entrega), ['observaciones' => 'Se explicó el cambio de balatas.', 'completar' => '1'])
+            ->assertRedirect(route('ordenes.show', $orden));
 
         // Entrega
         $this->post(route('ordenes.estado', $orden), ['estado' => 'entregado'])->assertSessionHas('ok');
@@ -94,7 +94,7 @@ class OrdenFlujoTest extends TestCase
 
         // Se programó el próximo cambio de aceite
         $proximo = $orden->vehiculo->recordatorios()->pendientes()->firstOrFail();
-        $this->assertSame($entrega->km + 10000, $proximo->km_programado);
+        $this->assertSame($orden->recepcion->km + 10000, $proximo->km_programado, 'La entrega no captura km: se usa el de la recepción');
         $this->assertTrue($proximo->fecha_programada->isSameDay(now()->addMonths(6)));
 
         // Orden cerrada: ya no se le agregan trabajos

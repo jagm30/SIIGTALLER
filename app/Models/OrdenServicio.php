@@ -224,7 +224,7 @@ class OrdenServicio extends Model
         });
     }
 
-    /** Crea la inspección de entrega en borrador (mismo checklist que la recepción). */
+    /** Crea la entrega en borrador: no repite el checklist, solo lleva observaciones finales. */
     public function iniciarEntrega(User $usuario): Inspeccion
     {
         return $this->entrega()->firstOrCreate([], [
@@ -283,7 +283,7 @@ class OrdenServicio extends Model
         if ($nuevo === EstadoOrden::Entregado
             && PreferenciaOperacion::bool('entrega_inspeccion_obligatoria', $this->sucursal_id, true)
             && $this->entrega()->first()?->estado !== EstadoInspeccion::Completada) {
-            $errores[] = 'La inspección de entrega no está completada.';
+            $errores[] = 'Falta completar la entrega (observaciones finales).';
         }
 
         if ($nuevo === EstadoOrden::Cancelado && blank($comentario ?? $this->motivo_cancelacion)) {
@@ -353,7 +353,8 @@ class OrdenServicio extends Model
 
     /**
      * Se ejecuta al entregar: marca como realizados los recordatorios pendientes de los
-     * servicios que se hicieron y programa el siguiente para cada servicio con intervalo.
+     * servicios que se hicieron y programa el siguiente con el intervalo del servicio o,
+     * si no tiene, con el general de Preferencias.
      */
     public function generarRecordatorios(): void
     {
@@ -376,7 +377,8 @@ class OrdenServicio extends Model
                     'orden_cumplimiento_id' => $this->id,
                 ]);
 
-            if (! $servicio->generaRecordatorio()) {
+            [$meses, $km] = $servicio->intervaloRecordatorio($this->sucursal_id);
+            if ($meses === null && $km === null) {
                 continue;
             }
 
@@ -384,10 +386,8 @@ class OrdenServicio extends Model
                 'orden_origen_id' => $this->id,
                 'servicio_id' => $servicio->id,
                 'descripcion' => $servicio->nombre,
-                'fecha_programada' => $servicio->intervalo_meses
-                    ? now()->addMonths($servicio->intervalo_meses)->toDateString()
-                    : null,
-                'km_programado' => $servicio->intervalo_km ? $kmSalida + $servicio->intervalo_km : null,
+                'fecha_programada' => $meses ? now()->addMonths($meses)->toDateString() : null,
+                'km_programado' => $km ? $kmSalida + $km : null,
                 'estado' => EstadoRecordatorio::Pendiente,
             ]);
         }

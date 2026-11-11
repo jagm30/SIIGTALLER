@@ -67,10 +67,10 @@
             @if ($orden->entrega)
                 @include('ordenes._inspeccion', ['inspeccion' => $orden->entrega, 'permiso' => 'entrega.realizar'])
             @elseif ($orden->estado === \App\Enums\EstadoOrden::Terminado && $user->tienePermiso('entrega.realizar'))
-                <p>El vehículo está terminado. Antes de entregarlo, revísalo con el cliente.</p>
+                <p>El vehículo está terminado. Revisa con el cliente el reporte de recepción y anota las observaciones finales.</p>
                 <form method="POST" action="{{ route('ordenes.entrega', $orden) }}">
                     @csrf
-                    <button class="boton">Iniciar inspección de entrega</button>
+                    <button class="boton">Iniciar entrega</button>
                 </form>
             @else
                 <p class="tenue">Se hace cuando la orden esté terminada.</p>
