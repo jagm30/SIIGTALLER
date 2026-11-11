@@ -24,6 +24,21 @@ enum TipoRespuesta: string
         };
     }
 
+    /**
+     * Respuestas fijas de este tipo de punto (valor => etiqueta). Número y texto se capturan libres.
+     *
+     * @return array<string, string>
+     */
+    public function valores(): array
+    {
+        return match ($this) {
+            self::SiNo => ['si' => 'Sí', 'no' => 'No'],
+            self::Estado => ['bueno' => 'Bueno', 'regular' => 'Regular', 'malo' => 'Malo', 'no_aplica' => 'N/A'],
+            self::Nivel => ['lleno' => 'Lleno', 'medio' => 'Medio', 'bajo' => 'Bajo'],
+            self::Numero, self::Texto => [],
+        };
+    }
+
     /** @return array<string, string> valor => etiqueta, para selects */
     public static function opciones(): array
     {

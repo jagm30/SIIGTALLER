@@ -5,6 +5,10 @@ namespace App\Models;
 use App\Enums\Combustible;
 use App\Enums\EstadoOrden;
 use App\Enums\Transmision;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -139,6 +143,23 @@ class Vehiculo extends Model
     }
 
     // ── Operaciones ──────────────────────────────────────────────
+
+    /** Dirección de la página pública que abre el QR. */
+    public function urlPublica(): string
+    {
+        return route('qr.show', $this->qr_token);
+    }
+
+    /** Imagen SVG del QR para imprimirla y entregarla al cliente. */
+    public function qrSvg(int $tamano = 260): string
+    {
+        $renderer = new ImageRenderer(new RendererStyle($tamano, 1), new SvgImageBackEnd());
+
+        $svg = (new Writer($renderer))->writeString($this->urlPublica());
+
+        // Va dentro del HTML: se quita la declaración XML del inicio.
+        return preg_replace('/^<\?xml[^>]*>\s*/', '', $svg);
+    }
 
     /** El QR anterior deja de funcionar. */
     public function regenerarQr(): void

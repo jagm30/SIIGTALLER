@@ -137,12 +137,6 @@
             @endforeach
         </select>
     </div>
-    @unless ($vehiculo->exists)
-        <div class="campo">
-            <label for="km_actual">Kilometraje actual</label>
-            <input type="number" id="km_actual" name="km_actual" value="{{ old('km_actual', $vehiculo->km_actual) }}" inputmode="numeric">
-        </div>
-    @endunless
 </div>
 <div class="campo">
     <label for="notas">Notas</label>

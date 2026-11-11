@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EstadoInspeccion;
+use App\Enums\GrupoChecklist;
 use App\Enums\TipoAdjunto;
 use App\Enums\TipoCarroceria;
 use App\Enums\TipoInspeccion;
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -126,6 +129,76 @@ class Inspeccion extends Model
     public function combustibleTexto(): ?string
     {
         return $this->nivel_combustible === null ? null : "{$this->nivel_combustible}/8";
+    }
+
+    /**
+     * Respuestas agrupadas como en la captura: por grupo (Accesorios, Tablero, …) en el orden
+     * del enum y, dentro de cada grupo, en el orden del catálogo.
+     *
+     * @return Collection<string, Collection<int, InspeccionRespuesta>>
+     */
+    public function checklistPorGrupo(): Collection
+    {
+        return $this->respuestas->loadMissing('checklistItem')
+            ->sortBy(fn ($r) => [
+                $r->checklistItem ? array_search($r->checklistItem->grupo, GrupoChecklist::cases()) : 99,
+                $r->checklistItem?->orden,
+            ])
+            ->groupBy(fn ($r) => $r->checklistItem?->grupo->label() ?? 'Otros puntos');
+    }
+
+    // ── Fotos y firma ────────────────────────────────────────────
+
+    /**
+     * Guarda las fotos por ángulo: [<id del ángulo> => archivo].
+     * Después de la firma ya no se aceptan: el cliente firmó lo que vio.
+     *
+     * @param  array<int, UploadedFile>  $archivos
+     * @return list<Adjunto> las fotos creadas
+     */
+    public function guardarFotos(array $archivos, User $usuario): array
+    {
+        if ($archivos === []) {
+            return [];
+        }
+
+        if ($this->firma()->exists()) {
+            throw ValidationException::withMessages(['fotos' => 'El cliente ya firmó. No se pueden agregar fotos después de la firma.']);
+        }
+
+        $angulos = AnguloFoto::whereIn('id', array_keys($archivos))->get()->keyBy('id');
+
+        $fotos = [];
+        foreach ($archivos as $anguloId => $archivo) {
+            $fotos[] = Adjunto::desdeArchivo($this, $archivo, TipoAdjunto::Foto, $usuario, $angulos->get($anguloId));
+        }
+
+        return $fotos;
+    }
+
+    /**
+     * Guarda la firma dibujada en el canvas (data:image/png;base64,...).
+     * Si ya había una, la reemplaza: mientras sea borrador se puede volver a firmar.
+     */
+    public function guardarFirma(string $dataUrl, User $usuario): void
+    {
+        $png = base64_decode(substr($dataUrl, strlen('data:image/png;base64,')), true);
+
+        if ($png === false || ! str_starts_with($png, "\x89PNG")) {
+            throw ValidationException::withMessages(['firma' => 'La firma no se pudo leer. Intenta de nuevo.']);
+        }
+
+        $this->adjuntos()->where('tipo', TipoAdjunto::Firma->value)->get()->each->eliminar();
+
+        // Pasa por un archivo temporal para usar el mismo camino que las fotos (ruta + huella SHA-256).
+        $temporal = tempnam(sys_get_temp_dir(), 'firma');
+        file_put_contents($temporal, $png);
+
+        try {
+            Adjunto::desdeArchivo($this, new UploadedFile($temporal, 'firma.png', 'image/png', null, true), TipoAdjunto::Firma, $usuario);
+        } finally {
+            unlink($temporal);
+        }
     }
 
     // ── Completar la inspección ──────────────────────────────────

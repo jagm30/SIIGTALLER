@@ -10,10 +10,13 @@ use App\Models\ChecklistItem;
 use App\Models\Inspeccion;
 use App\Models\PreferenciaOperacion;
 use App\Models\ZonaVehiculo;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 /**
@@ -21,9 +24,10 @@ use Illuminate\View\View;
  *
  * Flujo en la tableta:
  *   1. edit()      muestra el formulario con lo que ya se capturó y lo que falta.
- *   2. update()    guarda avance (se puede salir y regresar después).
+ *   2. update()    guarda avance, incluidas fotos y firma (se puede salir y regresar después).
  *   3. completar() revisa que no falte nada obligatorio y cierra el acta.
- * Las fotos y la firma se suben con AdjuntoController; los daños con InspeccionDanioController.
+ *   4. pdf()       exporta el acta completada para imprimirla o enviarla.
+ * Los daños se registran con InspeccionDanioController.
  */
 class InspeccionController extends Controller
 {
@@ -64,7 +68,7 @@ class InspeccionController extends Controller
         $this->autorizarCaptura($request->user(), $inspeccion);
 
         DB::transaction(function () use ($request, $inspeccion) {
-            $inspeccion->update($request->safe()->except('respuestas') + [
+            $inspeccion->update($request->safe()->except(['respuestas', 'fotos', 'firma']) + [
                 // Las casillas que no se marcan no llegan en el formulario: las ponemos en false.
                 'sin_placas' => $request->boolean('sin_placas'),
                 'persona_es_cliente' => $request->boolean('persona_es_cliente'),
@@ -72,9 +76,15 @@ class InspeccionController extends Controller
             ]);
 
             $this->guardarRespuestas($inspeccion, $request->input('respuestas', []));
+
+            // Primero las fotos y luego la firma: si se mandan juntas, el cliente firma con las fotos ya tomadas.
+            $inspeccion->guardarFotos($request->file('fotos', []), $request->user());
+            if ($request->filled('firma')) {
+                $inspeccion->guardarFirma($request->input('firma'), $request->user());
+            }
         });
 
-        // Guardado automático desde la pantalla (antes de subir fotos, daños o firma).
+        // Guardado automático desde la pantalla (antes de registrar un daño).
         if ($request->expectsJson()) {
             return response()->json(['guardado' => true]);
         }
@@ -95,11 +105,36 @@ class InspeccionController extends Controller
         // formulario con la lista exacta de lo que falta en $errors->get('inspeccion').
         $inspeccion->completar();
 
-        $mensaje = $inspeccion->esRecepcion()
-            ? 'Recepción completada. La orden ya puede pasar a diagnóstico.'
-            : 'Inspección de entrega completada. Ya puedes marcar la orden como entregada.';
+        // Al terminar la recepción se imprime el QR que se le entrega al cliente.
+        if ($inspeccion->esRecepcion()) {
+            return redirect()->route('ordenes.qr', $inspeccion->orden_servicio_id)
+                ->with('ok', 'Recepción completada. Imprime el QR y entrégalo al cliente.');
+        }
 
-        return redirect()->route('ordenes.show', $inspeccion->orden_servicio_id)->with('ok', $mensaje);
+        return redirect()->route('ordenes.show', $inspeccion->orden_servicio_id)
+            ->with('ok', 'Inspección de entrega completada. Ya puedes marcar la orden como entregada.');
+    }
+
+    /** Acta en PDF tamaño carta: hoja 1 con datos y checklist; hoja 2 con fotos, daños y firma. */
+    public function pdf(Inspeccion $inspeccion): Response|RedirectResponse
+    {
+        Gate::authorize('ver-orden', $inspeccion->orden);
+
+        if (! $inspeccion->estaCompletada()) {
+            return back()->with('error', 'El PDF se genera cuando la inspección está completada.');
+        }
+
+        $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente', 'orden.sucursal',
+            'respuestas.checklistItem', 'danios.zona', 'danios.fotos', 'fotos.anguloFoto', 'firma', 'realizadaPor']);
+
+        $nombre = ($inspeccion->esRecepcion() ? 'recepcion-' : 'entrega-') . $inspeccion->orden->folio . '.pdf';
+
+        return Pdf::loadView('inspecciones.pdf', [
+            'inspeccion' => $inspeccion,
+            'orden' => $inspeccion->orden,
+            'checklist' => $inspeccion->checklistPorGrupo(),
+            'terminos' => PreferenciaOperacion::valor('recepcion_terminos', $inspeccion->orden->sucursal_id),
+        ])->setPaper('letter')->stream($nombre);
     }
 
     // ── Apoyo ────────────────────────────────────────────────────

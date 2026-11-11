@@ -53,7 +53,6 @@ class VehiculoRequest extends FormRequest
             'numero_motor' => ['nullable', 'string', 'max:30'],
             'combustible' => ['nullable', Rule::enum(Combustible::class)],
             'transmision' => ['nullable', Rule::enum(Transmision::class)],
-            'km_actual' => ['nullable', 'integer', 'min:0', 'max:3000000'],
             'notas' => ['nullable', 'string', 'max:2000'],
         ];
     }
@@ -69,7 +68,6 @@ class VehiculoRequest extends FormRequest
             'tipo_carroceria' => 'tipo de carrocería',
             'anio' => 'año',
             'vin' => 'número de serie (VIN)',
-            'km_actual' => 'kilometraje',
         ];
     }
 

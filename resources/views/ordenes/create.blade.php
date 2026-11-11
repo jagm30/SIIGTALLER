@@ -29,7 +29,12 @@
                 @empty
                     <p>No encontramos ese vehículo.</p>
                 @endforelse
-                <p class="tenue chico">¿Es un vehículo nuevo? <a href="{{ route('clientes.create') }}">Registra al cliente</a> o <a href="{{ route('vehiculos.create') }}">registra el vehículo</a> de un cliente existente.</p>
+                {{-- Lo buscado pasa al registro: 17 caracteres es un número de serie (VIN); lo demás, placas --}}
+                @php($campo = strlen(\App\Models\Vehiculo::normalizarPlacas($buscar)) === 17 ? 'vin' : 'placas')
+                <p class="fila">
+                    <a href="{{ route('vehiculos.create', [$campo => $buscar]) }}" class="boton secundario chico">Registrar vehículo nuevo con {{ $campo === 'vin' ? 'número de serie' : 'placas' }} {{ strtoupper($buscar) }}</a>
+                    <span class="tenue chico">Si el cliente tampoco está registrado, ahí mismo lo das de alta.</span>
+                </p>
             </div>
         @endif
     @elseif ($vehiculo->ordenAbierta)

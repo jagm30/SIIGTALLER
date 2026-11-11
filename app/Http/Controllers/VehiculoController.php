@@ -37,7 +37,12 @@ class VehiculoController extends Controller
 
     public function create(Request $request): View
     {
-        $vehiculo = new Vehiculo(['cliente_id' => $request->integer('cliente_id') ?: null]);
+        // Las placas o el VIN llegan prellenados cuando vienen del buscador de recepción sin resultados.
+        $vehiculo = new Vehiculo([
+            'cliente_id' => $request->integer('cliente_id') ?: null,
+            'placas' => $request->query('placas'),
+            'vin' => $request->query('vin'),
+        ]);
 
         return view('vehiculos.create', ['vehiculo' => $vehiculo] + $this->listas());
     }
@@ -78,9 +83,6 @@ class VehiculoController extends Controller
         DB::transaction(function () use ($request, $vehiculo) {
             $datos = $this->datosDelVehiculo($request);
             $nuevoDueno = (int) $datos['cliente_id'] !== $vehiculo->cliente_id;
-
-            // El kilometraje solo se actualiza en la recepción; aquí no se deja bajar por error.
-            unset($datos['km_actual']);
 
             if ($nuevoDueno) {
                 // Cambiar de dueño cierra el registro anterior; el historial sigue con el vehículo.
@@ -162,7 +164,6 @@ class VehiculoController extends Controller
 
         // La marca siempre sale del modelo, así nunca quedan desalineadas.
         $datos['marca_id'] = ModeloVehiculo::findOrFail($datos['modelo_vehiculo_id'])->marca_id;
-        $datos['km_actual'] ??= 0;
 
         return $datos;
     }

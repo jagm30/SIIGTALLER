@@ -34,6 +34,11 @@ class InspeccionRequest extends FormRequest
             'respuestas' => ['array'],
             'respuestas.*.valor' => ['nullable', 'string', 'max:30'],
             'respuestas.*.comentario' => ['nullable', 'string', 'max:255'],
+
+            // fotos[<id del ángulo>] = archivo; la firma llega como PNG en base64 desde el canvas
+            'fotos' => ['nullable', 'array'],
+            'fotos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'], // 10 MB
+            'firma' => ['nullable', 'string', 'starts_with:data:image/png;base64,', 'max:700000'],
         ];
     }
 
@@ -45,6 +50,7 @@ class InspeccionRequest extends FormRequest
             'nivel_combustible' => 'nivel de gasolina',
             'persona_nombre' => 'nombre de quien entrega',
             'firmante_nombre' => 'nombre de quien firma',
+            'fotos.*' => 'foto',
         ];
     }
 }

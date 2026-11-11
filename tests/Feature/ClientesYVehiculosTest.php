@@ -74,6 +74,7 @@ class ClientesYVehiculosTest extends TestCase
         ])->assertRedirect();
 
         $v = Vehiculo::firstOrFail();
+        $this->assertSame(0, $v->km_actual, 'El kilometraje se captura en la recepción, no al registrar');
         $this->assertSame('TXZ4567', $v->placas_normalizadas);
         $this->assertSame('3G1TA5AF4HL234567', $v->vin);
         $this->assertSame($aveo->marca_id, $v->marca_id, 'La marca debe salir del modelo');
@@ -81,6 +82,33 @@ class ClientesYVehiculosTest extends TestCase
 
         // Se encuentra escribiendo las placas de otra forma
         $this->get('/vehiculos?buscar=TXZ4567')->assertSee('Aveo');
+    }
+
+    public function test_el_registro_de_vehiculo_no_pide_kilometraje(): void
+    {
+        $this->actingAs($this->recepcion)->get(route('vehiculos.create'))
+            ->assertOk()
+            ->assertDontSee('name="km_actual"', false);
+    }
+
+    public function test_placas_no_encontradas_en_recepcion_se_prellenan_al_registrar(): void
+    {
+        $this->actingAs($this->recepcion)->get(route('ordenes.create', ['buscar' => 'abc-12-34']))
+            ->assertSee('No encontramos ese vehículo.')
+            ->assertSee(route('vehiculos.create', ['placas' => 'abc-12-34']), false);
+
+        $this->get(route('vehiculos.create', ['placas' => 'abc-12-34']))
+            ->assertSee('name="placas" value="ABC-12-34"', false);
+    }
+
+    public function test_un_vin_no_encontrado_en_recepcion_se_prellena_como_numero_de_serie(): void
+    {
+        $this->actingAs($this->recepcion)->get(route('ordenes.create', ['buscar' => '3N1CN7AD5KL123456']))
+            ->assertSee(route('vehiculos.create', ['vin' => '3N1CN7AD5KL123456']), false);
+
+        $this->get(route('vehiculos.create', ['vin' => '3n1cn7ad5kl123456']))
+            ->assertSee('name="vin" value="3N1CN7AD5KL123456"', false)
+            ->assertSee('name="placas" value=""', false);
     }
 
     public function test_rechaza_vin_repetido_o_con_letras_invalidas(): void

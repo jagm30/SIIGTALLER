@@ -69,9 +69,9 @@ class RecepcionTest extends TestCase
             'respuestas' => $respuestas,
         ])->assertSessionHasNoErrors();
 
-        // 6. Fotos por ángulo (se suben reales y se guardan con su huella)
+        // 6. Fotos por ángulo con "Guardar avance" (se suben reales y se guardan con su huella)
         $fotos = AnguloFoto::obligatoriosPara('sedan')->mapWithKeys(fn ($a) => [$a->id => UploadedFile::fake()->image("{$a->clave}.jpg", 800, 600)])->all();
-        $this->post(route('inspecciones.fotos', $orden->recepcion), ['fotos' => $fotos])->assertSessionHas('ok');
+        $this->put(route('inspecciones.update', $orden->recepcion), ['fotos' => $fotos])->assertSessionHas('ok', 'Avance guardado.');
 
         $foto = $orden->recepcion->fotos()->firstOrFail();
         Storage::disk('local')->assertExists($foto->ruta);
@@ -85,12 +85,9 @@ class RecepcionTest extends TestCase
             'medida_cm' => 15, 'foto' => UploadedFile::fake()->image('rayon.jpg'),
         ])->assertSessionHas('ok', 'Daño registrado.');
 
-        // 8. Firma dibujada en el canvas
-        $this->post(route('inspecciones.firma', $orden->recepcion), ['firma' => $this->firmaPng()])->assertSessionHas('ok');
-
-        // 9. Completar: ya no falta nada
-        $this->post(route('inspecciones.completar', $orden->recepcion))
-            ->assertRedirect(route('ordenes.show', $orden))
+        // 8. Firma dibujada en el canvas + "Guardar y completar" en el mismo envío: ya no falta nada
+        $this->put(route('inspecciones.update', $orden->recepcion), ['firma' => $this->firmaPng(), 'acepta_terminos' => '1', 'completar' => '1'])
+            ->assertRedirect(route('ordenes.qr', $orden))
             ->assertSessionHas('ok');
 
         $recepcion = $orden->recepcion->fresh();
@@ -130,17 +127,17 @@ class RecepcionTest extends TestCase
         $pagina->assertSee('<input type="hidden" name="respuestas[' . $gato->id . '][valor]" value="">', false);
     }
 
-    public function test_las_preguntas_de_si_no_de_funcionamiento_no_se_marcan_en_masa(): void
+    public function test_las_preguntas_de_si_no_de_funcionamiento_tienen_su_propio_marcar_todos(): void
     {
         // "El vehículo enciende" y "Llegó en grúa" van en Funcionamiento, fuera del Tablero:
         // "Marcar todos: No" del Tablero (ningún testigo encendido) no debe decir que el auto no enciende.
         $this->assertSame('funcionamiento', ChecklistItem::where('nombre', 'El vehículo enciende')->firstOrFail()->grupo->value);
         $this->assertFalse(ChecklistItem::where('grupo', 'tablero')->where('nombre', 'Llegó en grúa')->exists());
 
-        // Y como en Funcionamiento son solo dos de Sí/No, su bloque no lleva botón de marcar todos.
+        // Su bloque de Sí/No lleva sus propios botones (solo afectan a ese bloque, no al Tablero).
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
         $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
-            ->assertSeeInOrder(['Funcionamiento', '<span class="titulo-columna">Sí</span>', 'El vehículo enciende', 'data-marcar="bueno"'], false);
+            ->assertSeeInOrder(['Funcionamiento', 'data-marcar="si" data-tipo="si_no"', 'data-marcar="no" data-tipo="si_no"', 'El vehículo enciende', 'Llegó en grúa', 'data-marcar="bueno"'], false);
     }
 
     public function test_limpiar_un_punto_borra_su_respuesta_al_guardar(): void
@@ -174,13 +171,40 @@ class RecepcionTest extends TestCase
 
         $this->actingAs($this->recepcion);
         $this->put(route('inspecciones.update', $insp), ['km' => 1])->assertStatus(409);
-        $this->post(route('inspecciones.fotos', $insp), ['fotos' => [1 => UploadedFile::fake()->image('x.jpg')]])->assertStatus(409);
+        $this->put(route('inspecciones.update', $insp), ['fotos' => [1 => UploadedFile::fake()->image('x.jpg')]])->assertStatus(409);
         $this->post(route('danios.store', $insp), ['vista' => 'frontal', 'tipo' => 'golpe', 'severidad' => 'leve'])->assertStatus(409);
-        $this->post(route('inspecciones.firma', $insp), ['firma' => $this->firmaPng()])->assertStatus(409);
+        $this->put(route('inspecciones.update', $insp), ['firma' => $this->firmaPng()])->assertStatus(409);
 
         // Abrir la captura de nuevo solo redirige a la orden
         $this->get(route('inspecciones.edit', $insp))->assertRedirect(route('ordenes.show', $orden));
         $this->assertNotSame(1, $insp->fresh()->km);
+    }
+
+    public function test_la_seccion_de_danios_solo_aparece_si_marcan_que_tiene_danios(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $insp = $orden->recepcion;
+        $this->actingAs($this->recepcion);
+
+        $oculta = function () use ($insp): bool {
+            preg_match('/<div[^>]*id="seccion-danios"[^>]*>/', $this->get(route('inspecciones.edit', $insp))->getContent(), $etiqueta);
+
+            return (bool) preg_match('/\shidden\b/', $etiqueta[0]);
+        };
+
+        // Sin contestar o «sin daños»: oculta
+        $this->assertTrue($oculta());
+        $insp->update(['sin_danios' => true]);
+        $this->assertTrue($oculta());
+
+        // «Sí, tiene daños»: visible
+        $insp->update(['sin_danios' => false]);
+        $this->assertFalse($oculta());
+
+        // Con daños registrados nunca se oculta, aunque marquen «sin daños», para poder eliminarlos
+        $insp->danios()->create(['vista' => 'frontal', 'pos_x' => 50, 'pos_y' => 50, 'tipo' => 'golpe', 'severidad' => 'leve']);
+        $insp->update(['sin_danios' => true]);
+        $this->assertFalse($oculta());
     }
 
     public function test_marcar_sin_danios_y_registrar_uno_no_se_contradice(): void
@@ -208,13 +232,115 @@ class RecepcionTest extends TestCase
         $angulo = AnguloFoto::firstOrFail();
 
         $this->actingAs($this->recepcion)
-            ->post(route('inspecciones.fotos', $orden->recepcion), ['fotos' => [$angulo->id => UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf')]])
+            ->put(route('inspecciones.update', $orden->recepcion), ['fotos' => [$angulo->id => UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf')]])
             ->assertSessionHasErrors('fotos.' . $angulo->id);
 
-        $this->post(route('inspecciones.firma', $orden->recepcion), ['firma' => 'data:image/png;base64,' . base64_encode('no soy png')])
+        $this->put(route('inspecciones.update', $orden->recepcion), ['firma' => 'data:image/png;base64,' . base64_encode('no soy png'), 'km' => 99999])
             ->assertSessionHasErrors('firma');
 
+        $this->assertNull($orden->recepcion->fresh()->km, 'Si la firma no se pudo leer, no se guarda nada del envío');
+
         $this->assertSame(0, $orden->recepcion->adjuntos()->count());
+    }
+
+    public function test_fotos_y_firma_se_guardan_con_los_botones_del_formulario_general(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $angulo = AnguloFoto::firstOrFail();
+
+        // Ya no hay botones aparte: los campos pertenecen al formulario principal
+        $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
+            ->assertSee('id="principal" enctype="multipart/form-data"', false)
+            ->assertSee('name="fotos[' . $angulo->id . ']" form="principal"', false)
+            ->assertSee('name="firma" id="firma" form="principal"', false)
+            ->assertDontSee('Subir fotos seleccionadas')
+            ->assertDontSee('Guardar firma');
+
+        // Un solo "Guardar avance" guarda datos, foto y firma
+        $this->put(route('inspecciones.update', $orden->recepcion), [
+            'km' => 85200,
+            'fotos' => [$angulo->id => UploadedFile::fake()->image('frente.jpg')],
+            'firma' => $this->firmaPng(),
+        ])->assertSessionHas('ok', 'Avance guardado.');
+
+        $recepcion = $orden->recepcion->fresh();
+        $this->assertSame(85200, $recepcion->km);
+        $this->assertSame(1, $recepcion->fotos()->count());
+        $this->assertNotNull($recepcion->firma);
+    }
+
+    public function test_la_foto_se_sube_sola_sin_tocar_el_resto_del_formulario(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $orden->recepcion->update(['acepta_terminos' => true, 'sin_placas' => true]);
+        $angulo = AnguloFoto::firstOrFail();
+
+        // La pantalla sabe a dónde subir cada foto
+        $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
+            ->assertSee('data-subir="' . route('inspecciones.fotos', $orden->recepcion) . '"', false);
+
+        // JavaScript manda solo la foto y recibe la dirección para mostrarla
+        $respuesta = $this->postJson(route('inspecciones.fotos', $orden->recepcion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('frente.jpg')]])
+            ->assertOk()
+            ->assertJsonPath('fotos.0.angulo_foto_id', $angulo->id);
+
+        $foto = $orden->recepcion->fotos()->firstOrFail();
+        $this->assertSame(route('adjuntos.show', $foto), $respuesta->json('fotos.0.url'));
+        Storage::disk('local')->assertExists($foto->ruta);
+
+        // Lo demás capturado no se toca (las casillas no se apagan)
+        $recepcion = $orden->recepcion->fresh();
+        $this->assertTrue($recepcion->acepta_terminos);
+        $this->assertTrue($recepcion->sin_placas);
+    }
+
+    public function test_la_subida_automatica_de_fotos_respeta_las_reglas(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $angulo = AnguloFoto::firstOrFail();
+        $url = route('inspecciones.fotos', $orden->recepcion);
+
+        // Solo imágenes
+        $this->actingAs($this->recepcion)
+            ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf')]])
+            ->assertStatus(422)->assertJsonValidationErrors('fotos.' . $angulo->id);
+
+        // El mecánico no captura la recepción
+        $this->actingAs($this->usuario(Rol::Mecanico))
+            ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]])
+            ->assertForbidden();
+
+        // Después de la firma ya no se aceptan
+        $this->adjuntoFalso($orden->recepcion, \App\Enums\TipoAdjunto::Firma);
+        $this->actingAs($this->recepcion)
+            ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]])
+            ->assertStatus(422)->assertJsonValidationErrors(['fotos' => 'El cliente ya firmó.']);
+
+        $this->assertSame(0, $orden->recepcion->fotos()->count());
+
+        // Completada: es evidencia, no se modifica
+        $completada = $this->ordenConRecepcion($this->usuario(Rol::Recepcionista), $this->vehiculo(['placas' => 'XYZ-99-99']))->recepcion;
+        $this->postJson(route('inspecciones.fotos', $completada), ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]])
+            ->assertStatus(409);
+    }
+
+    public function test_los_errores_de_validacion_salen_debajo_de_los_botones_de_guardar(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $pantalla = route('inspecciones.edit', $orden->recepcion);
+
+        // Dato inválido al guardar avance
+        $this->actingAs($this->recepcion)->from($pantalla)
+            ->put(route('inspecciones.update', $orden->recepcion), ['nivel_combustible' => 20])
+            ->assertRedirect($pantalla);
+        $html = $this->get($pantalla)
+            ->assertSeeInOrder(['Guardar y completar', 'Revisa lo siguiente:', 'nivel de gasolina'])
+            ->getContent();
+        $this->assertSame(1, substr_count($html, 'Revisa lo siguiente:'), 'El error ya no se repite arriba de la pantalla');
+
+        // Completar a medias: lo que falta también aparece junto a los botones
+        $this->from($pantalla)->put(route('inspecciones.update', $orden->recepcion), ['completar' => '1']);
+        $this->get($pantalla)->assertSeeInOrder(['Guardar y completar', 'Todavía no se puede completar.', 'Checklist: faltan']);
     }
 
     public function test_volver_a_firmar_reemplaza_la_firma_anterior(): void
@@ -222,9 +348,9 @@ class RecepcionTest extends TestCase
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
         $this->actingAs($this->recepcion);
 
-        $this->post(route('inspecciones.firma', $orden->recepcion), ['firma' => $this->firmaPng()]);
+        $this->put(route('inspecciones.update', $orden->recepcion), ['firma' => $this->firmaPng()]);
         $primera = $orden->recepcion->firma()->first()->ruta;
-        $this->post(route('inspecciones.firma', $orden->recepcion), ['firma' => $this->firmaPng()]);
+        $this->put(route('inspecciones.update', $orden->recepcion), ['firma' => $this->firmaPng()]);
 
         $this->assertSame(1, $orden->recepcion->adjuntos()->where('tipo', 'firma')->count());
         Storage::disk('local')->assertMissing($primera);
@@ -238,15 +364,15 @@ class RecepcionTest extends TestCase
 
         // Antes de firmar: se puede subir foto sin problema
         $this->actingAs($this->recepcion)
-            ->post(route('inspecciones.fotos', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('antes.jpg')]])
+            ->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('antes.jpg')]])
             ->assertSessionHas('ok');
 
         // El cliente firma
         $this->adjuntoFalso($inspeccion, \App\Enums\TipoAdjunto::Firma);
 
         // Después de firmar: se bloquea
-        $this->post(route('inspecciones.fotos', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('despues.jpg')]])
-            ->assertSessionHas('error');
+        $this->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('despues.jpg')]])
+            ->assertSessionHasErrors(['fotos' => 'El cliente ya firmó. No se pueden agregar fotos después de la firma.']);
 
         $this->assertSame(1, $inspeccion->fotos()->count(), 'Solo debe existir la foto subida antes de la firma');
     }
@@ -255,7 +381,7 @@ class RecepcionTest extends TestCase
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
         $angulo = AnguloFoto::firstOrFail();
-        $this->actingAs($this->recepcion)->post(route('inspecciones.fotos', $orden->recepcion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]]);
+        $this->actingAs($this->recepcion)->put(route('inspecciones.update', $orden->recepcion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]]);
         $foto = $orden->recepcion->fotos()->firstOrFail();
 
         $this->get(route('adjuntos.show', $foto))->assertOk();

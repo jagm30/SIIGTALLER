@@ -46,10 +46,10 @@
         <div class="aviso error">{{ session('error') }}</div>
     @endif
 
-    {{-- Errores de validación y de reglas del negocio.
-         Los faltantes de una inspección (clave "inspeccion") los muestra su propia pantalla. --}}
+    {{-- Errores de validación y de reglas del negocio. Una pantalla que los muestra en otro
+         lugar (junto a su botón de guardar) define la sección "errores_en_pagina". --}}
     @php($mensajes = collect($errors->messages())->except('inspeccion')->flatten())
-    @if ($mensajes->isNotEmpty())
+    @if ($mensajes->isNotEmpty() && ! View::hasSection('errores_en_pagina'))
         <div class="aviso error">
             <strong>Revisa lo siguiente:</strong>
             <ul>

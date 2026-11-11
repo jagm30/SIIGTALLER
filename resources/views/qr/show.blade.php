@@ -13,6 +13,12 @@
 
         @if ($enTaller)
             <div class="aviso alerta">Tu vehículo está en el taller: <strong>{{ $enTaller->estado->label() }}</strong>.</div>
+            @if ($enTaller->diagnostico || $enTaller->trabajos->isNotEmpty() || $enTaller->refacciones->isNotEmpty())
+                <div class="tarjeta">
+                    <h2>Servicio en curso</h2>
+                    @include('qr._orden', ['orden' => $enTaller])
+                </div>
+            @endif
         @endif
 
         <div class="tarjeta">
@@ -34,10 +40,7 @@
                 <div style="border-bottom: 1px solid var(--borde); padding: .6rem 0;">
                     <strong>{{ ($orden->fecha_entrega ?? $orden->fecha_ingreso)->format('d/m/Y') }}</strong>
                     <span class="tenue">· {{ number_format($orden->entrega?->km ?? $orden->recepcion?->km ?? 0) }} km</span>
-                    <ul style="margin: .25rem 0 0; padding-left: 1.2rem;">
-                        @foreach ($orden->trabajos as $t)<li>{{ $t->descripcion }}</li>@endforeach
-                        @foreach ($orden->refacciones as $r)<li class="tenue">{{ $r->descripcion }} ({{ (float) $r->cantidad }})</li>@endforeach
-                    </ul>
+                    @include('qr._orden')
                     @if ($mostrarPrecios && $orden->total !== null)
                         <p class="chico" style="margin: .25rem 0 0;">Total: ${{ number_format($orden->total, 2) }}</p>
                     @endif

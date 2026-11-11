@@ -9,6 +9,7 @@
         <strong>Fotos:</strong> {{ $inspeccion->fotos->count() }}
         @if ($inspeccion->objetos_personales)<br><strong>Objetos que dejó:</strong> {{ $inspeccion->objetos_personales }}@endif
     </p>
+    <p><a href="{{ route('inspecciones.pdf', $inspeccion) }}" class="boton chico secundario" target="_blank">Exportar acta en PDF</a></p>
     @if ($inspeccion->fotos->isNotEmpty())
         <div class="fotos">
             @foreach ($inspeccion->fotos->take(6) as $foto)

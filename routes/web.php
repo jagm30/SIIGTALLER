@@ -53,23 +53,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/ordenes/{orden}', [OrdenServicioController::class, 'show'])->name('ordenes.show');
     Route::patch('/ordenes/{orden}', [OrdenServicioController::class, 'update'])->name('ordenes.update');
     Route::post('/ordenes/{orden}/estado', [OrdenServicioController::class, 'cambiarEstado'])->name('ordenes.estado');
+    Route::get('/ordenes/{orden}/qr', [QrController::class, 'imprimir'])->name('ordenes.qr');
     Route::post('/ordenes/{orden}/entrega', [OrdenServicioController::class, 'iniciarEntrega'])->middleware('can:entrega.realizar')->name('ordenes.entrega');
 
     // Trabajos y refacciones de la orden (mecánico y administrador)
     Route::middleware('can:ordenes.trabajar')->group(function () {
         Route::post('/ordenes/{orden}/trabajos', [TrabajoController::class, 'store'])->name('trabajos.store');
         Route::patch('/trabajos/{trabajo}', [TrabajoController::class, 'update'])->name('trabajos.update');
+        Route::patch('/trabajos/{trabajo}/precio', [TrabajoController::class, 'precio'])->name('trabajos.precio');
         Route::delete('/trabajos/{trabajo}', [TrabajoController::class, 'destroy'])->name('trabajos.destroy');
         Route::post('/ordenes/{orden}/refacciones', [RefaccionUsadaController::class, 'store'])->name('refacciones-usadas.store');
+        Route::patch('/refacciones-usadas/{refaccionUsada}/precio', [RefaccionUsadaController::class, 'precio'])->name('refacciones-usadas.precio');
         Route::delete('/refacciones-usadas/{refaccionUsada}', [RefaccionUsadaController::class, 'destroy'])->name('refacciones-usadas.destroy');
     });
 
     // Recepción y entrega del vehículo (el permiso se revisa en el controlador según el tipo)
     Route::get('/inspecciones/{inspeccion}', [InspeccionController::class, 'edit'])->name('inspecciones.edit');
     Route::put('/inspecciones/{inspeccion}', [InspeccionController::class, 'update'])->name('inspecciones.update');
+    Route::get('/inspecciones/{inspeccion}/pdf', [InspeccionController::class, 'pdf'])->name('inspecciones.pdf');
     Route::post('/inspecciones/{inspeccion}/completar', [InspeccionController::class, 'completar'])->name('inspecciones.completar');
     Route::post('/inspecciones/{inspeccion}/fotos', [AdjuntoController::class, 'storeFotos'])->name('inspecciones.fotos');
-    Route::post('/inspecciones/{inspeccion}/firma', [AdjuntoController::class, 'storeFirma'])->name('inspecciones.firma');
     Route::post('/inspecciones/{inspeccion}/danios', [InspeccionDanioController::class, 'store'])->name('danios.store');
     Route::delete('/danios/{danio}', [InspeccionDanioController::class, 'destroy'])->name('danios.destroy');
 

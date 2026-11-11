@@ -125,6 +125,47 @@ class OrdenFlujoTest extends TestCase
         $this->assertSame('Aceite degradado', $orden->fresh()->diagnostico);
     }
 
+    public function test_el_campo_diagnostico_aparece_bloqueado_hasta_la_fase_de_diagnostico(): void
+    {
+        $orden = $this->ordenConRecepcion($this->recepcion);
+        $orden->update(['mecanico_responsable_id' => $this->mecanico->id]);
+
+        $this->actingAs($this->mecanico)->get(route('ordenes.show', $orden))
+            ->assertSee('<textarea id="diagnostico" name="diagnostico" disabled>', false)
+            ->assertSee('Disponible a partir de la fase de diagnóstico.');
+
+        $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
+
+        $this->get(route('ordenes.show', $orden))
+            ->assertSee('<textarea id="diagnostico" name="diagnostico" >', false)
+            ->assertDontSee('Disponible a partir de la fase de diagnóstico.');
+    }
+
+    public function test_en_diagnostico_el_formulario_va_arriba_y_se_ocultan_recepcion_y_entrega(): void
+    {
+        $orden = $this->ordenConRecepcion($this->recepcion);
+        $this->actingAs($this->admin);
+
+        // Recibido: recepción y entrega arriba, como siempre
+        $this->get(route('ordenes.show', $orden))
+            ->assertSeeInOrder(['<h2>Recepción</h2>', '<h2>Entrega</h2>', 'Diagnóstico y datos de la orden'], false);
+
+        // Diagnóstico: primero el formulario (con lo que reporta el cliente) y luego el siguiente paso
+        $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
+        $html = $this->get(route('ordenes.show', $orden))
+            ->assertSeeInOrder(['Diagnóstico y datos de la orden', 'Lo que reporta el cliente:', $orden->motivo_ingreso, 'Siguiente paso', 'Trabajos realizados'])
+            ->assertDontSee('<h2>Recepción</h2>', false)
+            ->assertDontSee('<h2>Entrega</h2>', false)
+            ->getContent();
+        $this->assertSame(1, substr_count($html, 'Diagnóstico y datos de la orden'), 'El formulario aparece una sola vez');
+
+        // Al salir de diagnóstico vuelve el acomodo normal
+        $orden->cambiarEstado(EstadoOrden::PorAutorizar, $this->admin);
+        $this->get(route('ordenes.show', $orden))
+            ->assertSeeInOrder(['<h2>Recepción</h2>', 'Diagnóstico y datos de la orden'], false)
+            ->assertDontSee('Lo que reporta el cliente:');
+    }
+
     public function test_no_se_puede_diagnosticar_sin_recepcion_completa(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');

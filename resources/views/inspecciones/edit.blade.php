@@ -4,11 +4,8 @@
     $titulo = $inspeccion->esRecepcion() ? 'Recepción del vehículo' : 'Entrega del vehículo';
     $orden = $inspeccion->orden;
     // Opciones de respuesta según el tipo de punto del checklist
-    $opciones = [
-        'si_no' => ['si' => 'Sí', 'no' => 'No'],
-        'estado' => ['bueno' => 'Bueno', 'regular' => 'Regular', 'malo' => 'Malo', 'no_aplica' => 'N/A'],
-        'nivel' => ['lleno' => 'Lleno', 'medio' => 'Medio', 'bajo' => 'Bajo'],
-    ];
+    $opciones = collect(\App\Enums\TipoRespuesta::cases())
+        ->mapWithKeys(fn ($t) => [$t->value => $t->valores()])->filter()->all();
     $fotosPorAngulo = $inspeccion->fotos->groupBy('angulo_foto_id');
     // Los puntos del checklist pendientes se resumen en una sola línea para que la lista no sea enorme.
     [$faltanChecklist, $faltanOtros] = collect($faltantes)->partition(fn ($f) => str_starts_with($f, 'Checklist: falta'));
@@ -26,15 +23,10 @@
         <a href="{{ route('ordenes.show', $orden) }}" class="boton secundario">Ver orden</a>
     </div>
 
-    {{-- Lo que falta: se actualiza cada vez que se guarda --}}
+    {{-- Lo que falta: se actualiza cada vez que se guarda. Los errores al guardar salen abajo, junto a los botones. --}}
     @if ($faltantes)
-        {{-- Se abre sola si son pocos o si acaban de intentar completar --}}
-        <details @class(['aviso', 'alerta' => ! $errors->has('inspeccion'), 'error' => $errors->has('inspeccion')])
-                 @if (count($faltantes) <= 8 || $errors->has('inspeccion')) open @endif>
-            <summary><strong>
-                {{ $errors->has('inspeccion') ? 'Todavía no se puede completar.' : '' }}
-                Faltan {{ count($faltantes) }} datos para completar
-            </strong></summary>
+        <details class="aviso alerta" @if (count($faltantes) <= 8) open @endif>
+            <summary><strong>Faltan {{ count($faltantes) }} datos para completar</strong></summary>
             <ul>
                 @if ($faltanChecklist->isNotEmpty())
                     <li>Checklist: faltan {{ $faltanChecklist->count() }} {{ $faltanChecklist->count() === 1 ? 'punto' : 'puntos' }} por responder (marcados con * en la sección 2).</li>
@@ -48,10 +40,10 @@
 
     {{--
         El formulario principal se llama "principal". Algunos de sus campos están más abajo
-        (términos y botones finales) usando el atributo form="principal", porque entre ellos
-        hay otros formularios (fotos, daños, firma) y HTML no permite formularios anidados.
+        (fotos, firma, términos y botones finales) usando el atributo form="principal", porque
+        entre ellos está el formulario de daños y HTML no permite formularios anidados.
     --}}
-    <form method="POST" action="{{ route('inspecciones.update', $inspeccion) }}" id="principal">
+    <form method="POST" action="{{ route('inspecciones.update', $inspeccion) }}" id="principal" enctype="multipart/form-data">
         @csrf @method('PUT')
 
         <div class="tarjeta">
@@ -103,7 +95,7 @@
                 <h2 style="margin: 0;">2. Revisión del vehículo</h2>
                 <span class="progreso" id="progreso-total"></span>
             </div>
-            <p class="ayuda">Toca el título de una columna (<strong>Sí</strong>, <strong>Bueno</strong>…) para marcar todos los que falten del grupo y luego corrige solo las excepciones. ✎ agrega un comentario. * obligatorio.</p>
+            <p class="ayuda">Toca el título de una columna (<strong>Sí</strong>, <strong>Bueno</strong>…) para marcar todo el bloque (puedes cambiarlo las veces que quieras mientras no guardes; lo ya guardado se respeta) y luego corrige solo las excepciones. ✎ agrega un comentario. * obligatorio.</p>
 
             <div class="grupos-check">
                 @foreach ($grupos as $grupo => $items)
@@ -122,14 +114,14 @@
                         <table class="matriz">
                             @foreach ($porTipo as $tipo => $puntos)
                                 @if (isset($opciones[$tipo]))
-                                    {{-- "Marcar todos" solo en bloques de 3 o más puntos; en los chicos, las columnas solo llevan su nombre --}}
-                                    @php($masivo = $puntos->count() >= 3)
+                                    {{-- "Marcar todos" en bloques de 2 o más puntos; con uno solo, las columnas solo llevan su nombre --}}
+                                    @php($masivo = $puntos->count() >= 2)
                                     <tr class="cabecera">
                                         <td class="tenue chico">{{ $masivo ? 'Marcar todos:' : '' }}</td>
                                         @foreach ($opciones[$tipo] as $valor => $texto)
                                             <th>
                                                 @if ($masivo)
-                                                    <button type="button" data-marcar="{{ $valor }}" data-tipo="{{ $tipo }}" title="Marcar «{{ $texto }}» en los que falten">{{ $texto }}</button>
+                                                    <button type="button" data-marcar="{{ $valor }}" data-tipo="{{ $tipo }}" title="Marcar «{{ $texto }}» en todos los que no estén guardados">{{ $texto }}</button>
                                                 @else
                                                     <span class="titulo-columna">{{ $texto }}</span>
                                                 @endif
@@ -233,28 +225,32 @@
             </div>
         </div>
     @else
-        <form method="POST" action="{{ route('inspecciones.fotos', $inspeccion) }}" enctype="multipart/form-data" class="tarjeta" data-guarda-avance>
-            @csrf
+        <div class="tarjeta">
             <h2>4. Fotos del vehículo</h2>
-            <p class="ayuda">En la tableta, cada botón abre la cámara. Puedes tomar varias y guardarlas juntas.</p>
-            <div class="fotos">
+            <p class="ayuda">En la tableta, cada botón abre la cámara. La foto se guarda sola en cuanto la tomas.</p>
+            {{-- Cada foto se sube al elegirla (JavaScript). Si la subida falla, el campo conserva el archivo
+                 y se vuelve a enviar con «Guardar avance» o «Guardar y completar». --}}
+            <div class="fotos" data-subir="{{ route('inspecciones.fotos', $inspeccion) }}">
                 @foreach ($angulos as $angulo)
                     <figure>
                         @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
                             <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
                         @endif
                         <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
-                            <br><span class="tenue">{{ $angulo->descripcion }}</span></figcaption>
-                        <input type="file" name="fotos[{{ $angulo->id }}]" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
+                            <br><span class="tenue">{{ $angulo->descripcion }}</span>
+                            <span class="estado-foto" aria-live="polite"></span></figcaption>
+                        <input type="file" name="fotos[{{ $angulo->id }}]" form="principal" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
                     </figure>
                 @endforeach
             </div>
-            <p style="margin-top: .75rem;"><button class="boton">Subir fotos seleccionadas</button></p>
-        </form>
+        </div>
     @endif
 
-    {{-- Daños --}}
-    <div class="tarjeta">
+    {{-- Daños: solo se muestra si marcaron «Sí, tiene daños». Si ya hay daños registrados no se oculta,
+         para que se puedan ver o eliminar (marcar «sin daños» con daños registrados sale en los faltantes). --}}
+    @php($tieneDanios = old('sin_danios') !== null ? old('sin_danios') === '0' : $inspeccion->sin_danios === false)
+    <div class="tarjeta" id="seccion-danios" data-registrados="{{ $inspeccion->danios->count() }}"
+         @unless ($tieneDanios || $inspeccion->danios->isNotEmpty()) hidden @endunless>
         <h2>5. Daños registrados</h2>
         @forelse ($inspeccion->danios as $d)
             <div class="fila" style="justify-content: space-between; border-bottom: 1px solid var(--borde); padding: .4rem 0;">
@@ -359,23 +355,42 @@
                 <span class="tenue chico">Firma guardada. Si vuelven a firmar, se reemplaza.</span></p>
         @endif
 
-        <form method="POST" action="{{ route('inspecciones.firma', $inspeccion) }}" id="form-firma" data-guarda-avance>
-            @csrf
-            <canvas id="lienzo-firma" class="firma"></canvas>
-            <input type="hidden" name="firma" id="firma">
-            <div class="fila" style="margin-top: .5rem;">
-                <button type="button" class="boton secundario chico" id="limpiar-firma">Borrar</button>
-                <button class="boton chico">Guardar firma</button>
-            </div>
-        </form>
+        <canvas id="lienzo-firma" class="firma"></canvas>
+        {{-- Se llena al terminar cada trazo; viaja con el formulario principal --}}
+        <input type="hidden" name="firma" id="firma" form="principal">
+        <div class="fila" style="margin-top: .5rem;">
+            <button type="button" class="boton secundario chico" id="limpiar-firma">Borrar</button>
+            <span class="ayuda" style="margin: 0;">La firma se guarda con los botones de abajo.</span>
+        </div>
     </div>
 
     {{-- Botones finales del formulario principal --}}
-    <div class="tarjeta fila" style="justify-content: flex-end;">
-        <button class="boton secundario" form="principal">Guardar avance</button>
-        <button class="boton exito" form="principal" name="completar" value="1">Guardar y completar {{ $inspeccion->esRecepcion() ? 'recepción' : 'entrega' }}</button>
+    <div class="tarjeta">
+        <div class="fila" style="justify-content: flex-end;">
+            <button class="boton secundario" form="principal">Guardar avance</button>
+            <button class="boton exito" form="principal" name="completar" value="1">Guardar y completar {{ $inspeccion->esRecepcion() ? 'recepción' : 'entrega' }}</button>
+        </div>
+
+        {{-- Errores al guardar o al completar: aquí, donde se presionó el botón --}}
+        @if ($errors->any())
+            @php([$errChecklist, $errOtros] = collect($errors->all())->partition(fn ($m) => str_starts_with($m, 'Checklist: falta')))
+            <div class="aviso error" style="margin: .75rem 0 0;" id="errores-guardado">
+                <strong>{{ $errors->has('inspeccion') ? 'Todavía no se puede completar.' : 'Revisa lo siguiente:' }}</strong>
+                <ul>
+                    @if ($errChecklist->isNotEmpty())
+                        <li>Checklist: faltan {{ $errChecklist->count() }} {{ $errChecklist->count() === 1 ? 'punto' : 'puntos' }} por responder (marcados con * en la sección 2).</li>
+                    @endif
+                    @foreach ($errOtros as $mensaje)
+                        <li>{{ $mensaje }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
     </div>
 @endsection
+
+{{-- Esta pantalla muestra sus errores junto a los botones de guardar, no arriba --}}
+@section('errores_en_pagina', '1')
 
 @push('scripts')
 <script>
@@ -384,9 +399,13 @@
         const CLAVE = 'scroll:' + location.pathname;
 
         const y = sessionStorage.getItem(CLAVE);
-        if (y !== null) {
-            sessionStorage.removeItem(CLAVE);
-            // requestAnimationFrame espera a que el DOM esté pintado antes de desplazarse.
+        sessionStorage.removeItem(CLAVE);
+        // requestAnimationFrame espera a que el DOM esté pintado antes de desplazarse.
+        // Si el guardado trajo errores, se muestran junto a los botones; si no, regresa a donde estaba.
+        const errores = document.getElementById('errores-guardado');
+        if (errores) {
+            requestAnimationFrame(() => errores.scrollIntoView({ block: 'center' }));
+        } else if (y !== null) {
             requestAnimationFrame(() => window.scrollTo(0, +y));
         }
 
@@ -402,16 +421,22 @@
         };
     })();
 
-    // Firma con el dedo o el mouse, sin librerías: dibuja en un <canvas> y lo envía como imagen PNG.
+    // Firma con el dedo o el mouse, sin librerías: dibuja en un <canvas> y, al terminar cada trazo,
+    // la deja como imagen PNG en el campo oculto que viaja con el formulario principal.
     (function () {
         const lienzo = document.getElementById('lienzo-firma');
         const ctx = lienzo.getContext('2d');
+        const campo = document.getElementById('firma');
         let dibujando = false;
-        let trazo = false;
+        let trazando = false; // hubo movimiento en el trazo actual
 
+        // Cambiar el tamaño del canvas lo borra; el campo se vacía para no guardar una firma que ya no se ve.
+        // Solo si cambió el ancho: en la tableta, al hacer scroll la barra del navegador cambia el alto y dispara "resize".
         function ajustarTamano() {
             const r = lienzo.getBoundingClientRect();
-            lienzo.width = r.width;
+            if (Math.round(r.width) === lienzo.width) return;
+            campo.value = '';
+            lienzo.width = Math.round(r.width);
             lienzo.height = r.height;
             ctx.lineWidth = 2.5;
             ctx.lineCap = 'round';
@@ -434,22 +459,26 @@
             const p = punto(e);
             ctx.lineTo(p.x, p.y);
             ctx.stroke();
-            trazo = true;
+            trazando = true;
         });
-        ['pointerup', 'pointerleave'].forEach((ev) => lienzo.addEventListener(ev, () => (dibujando = false)));
+        ['pointerup', 'pointerleave'].forEach((ev) => lienzo.addEventListener(ev, () => {
+            dibujando = false;
+            if (trazando) campo.value = lienzo.toDataURL('image/png');
+            trazando = false;
+        }));
 
         document.getElementById('limpiar-firma').addEventListener('click', () => {
             ctx.clearRect(0, 0, lienzo.width, lienzo.height);
-            trazo = false;
+            campo.value = '';
         });
 
-        document.getElementById('form-firma').addEventListener('submit', (e) => {
-            if (!trazo) {
-                e.preventDefault();
-                alert('Pide al cliente que firme en el recuadro.');
-                return;
-            }
-            document.getElementById('firma').value = lienzo.toDataURL('image/png');
+        // La sección de daños aparece al marcar «Sí, tiene daños» (o si ya hay daños registrados).
+        const seccionDanios = document.getElementById('seccion-danios');
+        document.querySelectorAll('input[name=sin_danios]').forEach((radio) => {
+            radio.addEventListener('change', () => {
+                const conDanios = document.querySelector('input[name=sin_danios][value="0"]').checked;
+                seccionDanios.hidden = ! conDanios && seccionDanios.dataset.registrados === '0';
+            });
         });
 
         // Al elegir una zona, la vista se ajusta sola.
@@ -461,8 +490,8 @@
         ajustarTamano();
         window.addEventListener('resize', ajustarTamano);
 
-        // Antes de subir fotos, daños o la firma, guarda lo que ya se capturó arriba.
-        // Si no, al recargar la página se perderían las respuestas del checklist sin guardar.
+        // Antes de registrar un daño, guarda todo lo capturado (incluidas fotos y firma).
+        // Si no, al recargar la página se perdería lo que no se había guardado.
         const principal = document.getElementById('principal');
         document.querySelectorAll('form[data-guarda-avance]').forEach((form) => {
             form.addEventListener('submit', async (e) => {
@@ -512,13 +541,15 @@
         }
 
         document.addEventListener('click', function (e) {
-            // Título de columna: marca esa opción en los puntos del grupo que no tienen respuesta.
-            // Los ya contestados se respetan para no perder las excepciones.
+            // Título de columna: marca esa opción en todos los puntos del bloque. Solo se respetan
+            // las respuestas ya guardadas (defaultChecked = venía marcada al cargar la página);
+            // lo que se marcó sin guardar se puede volver a cambiar en general.
             const marcar = e.target.closest('[data-marcar]');
             if (marcar) {
                 const grupo = marcar.closest('[data-grupo]');
                 grupo.querySelectorAll('[data-item][data-tipo="' + marcar.dataset.tipo + '"]').forEach(function (r) {
-                    if (r.querySelector('input[type=radio]:checked')) return;
+                    const actual = r.querySelector('input[type=radio]:checked');
+                    if (actual && actual.defaultChecked) return;
                     const opcion = r.querySelector('input[type=radio][value="' + marcar.dataset.marcar + '"]');
                     if (opcion) opcion.checked = true;
                 });
@@ -556,39 +587,96 @@
 
         contar();
     })();
-    // ── Vista previa de fotos ────────────────────────────────────
-    // Al elegir una foto (cámara o galería) la muestra de inmediato en el recuadro,
-    // sin esperar a presionar "Subir fotos". Borde verde + ✓ confirman la selección.
+    // ── Fotos: se suben solas al tomarlas ────────────────────────
+    // Al elegir una foto (cámara o galería) se muestra de inmediato y se sube en segundo plano.
+    // Si se sube bien, el campo se vacía para que «Guardar» no la mande otra vez; si falla,
+    // el archivo se queda en el campo y viaja con «Guardar avance» o «Guardar y completar».
     (function () {
-        document.querySelectorAll('.fotos input[type=file]').forEach(function (input) {
-            input.addEventListener('change', function () {
+        const contenedor = document.querySelector('.fotos[data-subir]');
+        if (! contenedor) return;
+        const token = document.querySelector('#principal input[name=_token]').value;
+
+        contenedor.querySelectorAll('input[type=file]').forEach(function (input) {
+            let envio = 0; // si eligen otra foto antes de que termine la anterior, solo cuenta la última
+
+            input.addEventListener('change', async function () {
                 const fig = input.closest('figure');
+                const estado = fig.querySelector('.estado-foto');
                 const archivo = input.files && input.files[0];
-                const fotoGuardada = fig.querySelector('a');
+                let guardada = fig.querySelector('a');
                 let preview = fig.querySelector('.foto-preview');
 
-                if (!archivo) {
-                    // El usuario canceló: volver al estado anterior
+                fig.classList.remove('con-preview', 'subiendo', 'error-foto');
+                estado.textContent = '';
+
+                if (! archivo) {
+                    // Canceló la cámara: vuelve a mostrar la foto que ya estaba
                     if (preview) preview.remove();
-                    if (fotoGuardada) fotoGuardada.hidden = false;
-                    fig.classList.remove('con-preview');
+                    if (guardada) guardada.hidden = false;
                     return;
                 }
 
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    if (!preview) {
-                        preview = document.createElement('img');
-                        preview.className = 'foto-preview';
-                        preview.alt = 'Vista previa';
-                        fig.prepend(preview);
+                if (! preview) {
+                    preview = document.createElement('img');
+                    preview.className = 'foto-preview';
+                    preview.alt = 'Vista previa';
+                    fig.prepend(preview);
+                }
+                preview.src = URL.createObjectURL(archivo);
+                if (guardada) guardada.hidden = true;
+
+                const miEnvio = ++envio;
+                fig.classList.add('subiendo');
+                estado.textContent = 'Subiendo…';
+
+                const datos = new FormData();
+                datos.append('_token', token);
+                datos.append(input.name, archivo);
+
+                let mensaje = null;
+                try {
+                    const r = await fetch(contenedor.dataset.subir, {
+                        method: 'POST',
+                        body: datos,
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    const json = await r.json().catch(() => ({}));
+                    if (miEnvio !== envio) return;
+
+                    if (r.ok) {
+                        // La foto subida reemplaza a la vista previa como foto guardada
+                        if (! guardada) {
+                            guardada = document.createElement('a');
+                            guardada.target = '_blank';
+                            guardada.appendChild(document.createElement('img'));
+                            fig.prepend(guardada);
+                        }
+                        guardada.href = json.fotos[0].url;
+                        guardada.querySelector('img').src = json.fotos[0].url;
+                        guardada.querySelector('img').alt = fig.querySelector('strong').textContent;
+                        guardada.hidden = false;
+                        preview.remove();
+                        input.value = '';
+                    } else if (r.status === 422) {
+                        // Foto rechazada (no es imagen, ya firmó…): reenviarla haría fallar todo el guardado
+                        mensaje = (Object.values(json.errors || {})[0]?.[0] || json.message) + ' Toma otra foto.';
+                        input.value = '';
+                    } else {
+                        mensaje = (json.message || 'No se pudo subir.') + ' Se intentará de nuevo al guardar.';
                     }
-                    preview.src = e.target.result;
-                    // Ocultar la foto guardada para que la vista previa ocupe su lugar
-                    if (fotoGuardada) fotoGuardada.hidden = true;
+                } catch (e) {
+                    if (miEnvio !== envio) return;
+                    mensaje = 'Sin conexión. Se intentará de nuevo al guardar.';
+                }
+
+                fig.classList.remove('subiendo');
+                if (mensaje) {
+                    fig.classList.add('error-foto');
+                    estado.textContent = mensaje;
+                } else {
                     fig.classList.add('con-preview');
-                };
-                reader.readAsDataURL(archivo);
+                    estado.textContent = 'Guardada';
+                }
             });
         });
     })();

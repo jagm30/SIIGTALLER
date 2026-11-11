@@ -8,6 +8,8 @@
     $editable = ! $orden->estaCerrada();
     $editableDiagnostico = $orden->puedeEditarDiagnostico();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
+    // En diagnóstico lo importante es capturar: el formulario va arriba y no se muestran recepción ni entrega.
+    $enDiagnostico = $orden->estado === \App\Enums\EstadoOrden::Diagnostico;
     // Botones de estado: solo los siguientes pasos que el rol de este usuario puede dar.
     $siguientes = collect($orden->estado->siguientes())->filter(fn ($e) => $user->tieneRol(...$e->rolesQuePuedenEntrar()));
     $dinero = fn ($v) => $v === null ? '—' : '$' . number_format((float) $v, 2);
@@ -25,6 +27,10 @@
         <a href="{{ route('vehiculos.show', $orden->vehiculo) }}" class="boton secundario">Historial del vehículo</a>
     </div>
 
+    @if ($enDiagnostico)
+        @include('ordenes._datos')
+    @endif
+
     {{-- Cambio de estado --}}
     @if ($siguientes->isNotEmpty())
         <form method="POST" action="{{ route('ordenes.estado', $orden) }}" class="tarjeta">
@@ -41,11 +47,15 @@
         </form>
     @endif
 
+    @unless ($enDiagnostico)
     <div class="rejilla-2">
         {{-- Recepción --}}
         <div class="tarjeta">
             <h2>Recepción</h2>
             @include('ordenes._inspeccion', ['inspeccion' => $orden->recepcion, 'permiso' => 'recepcion.realizar'])
+            @if ($orden->recepcion->estaCompletada())
+                <p><a href="{{ route('ordenes.qr', $orden) }}" class="boton chico secundario">Imprimir QR del cliente</a></p>
+            @endif
             <p class="chico"><strong>Motivo de ingreso:</strong> {{ $orden->motivo_ingreso }}</p>
             <p class="chico tenue">Recibió: {{ $orden->recibidoPor->name }} · {{ $orden->fecha_ingreso->format('d/m/Y H:i') }}
                 @if ($orden->fecha_promesa) · Promesa: {{ $orden->fecha_promesa->format('d/m/Y') }} @endif</p>
@@ -71,58 +81,8 @@
         </div>
     </div>
 
-    {{-- Datos generales --}}
-    <form method="POST" action="{{ route('ordenes.update', $orden) }}" class="tarjeta">
-        @csrf @method('PATCH')
-        <h2>Diagnóstico y datos de la orden</h2>
-        <div class="rejilla">
-            @unless ($user->esMecanico())
-                <div class="campo">
-                    <label for="mecanico_responsable_id">Mecánico responsable</label>
-                    <select id="mecanico_responsable_id" name="mecanico_responsable_id" @disabled(! $editable)>
-                        <option value="">— Sin asignar —</option>
-                        @foreach ($mecanicos as $m)
-                            <option value="{{ $m->id }}" @selected($orden->mecanico_responsable_id === $m->id)>{{ $m->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="campo">
-                    <label for="fecha_promesa">Fecha promesa</label>
-                    <input type="date" id="fecha_promesa" name="fecha_promesa" value="{{ old('fecha_promesa', $orden->fecha_promesa?->format('Y-m-d')) }}" @disabled(! $editable)>
-                </div>
-                @if ($verPrecios)
-                    <div class="campo">
-                        {{-- El descuento puede ser en pesos o en porcentaje del subtotal --}}
-                        @php($enPorcentaje = old('descuento_tipo', $orden->descuento_porcentaje !== null ? 'porcentaje' : 'monto') === 'porcentaje')
-                        <label for="descuento">Descuento</label>
-                        <div class="fila" style="flex-wrap: nowrap;">
-                            <select name="descuento_tipo" aria-label="Tipo de descuento" style="width: auto; flex-shrink: 0;" @disabled(! $editable)>
-                                <option value="monto" @selected(! $enPorcentaje)>$</option>
-                                <option value="porcentaje" @selected($enPorcentaje)>%</option>
-                            </select>
-                            <input type="number" step="0.01" min="0" id="descuento" name="descuento" @disabled(! $editable)
-                                   style="flex: 1; min-width: 0;"
-                                   value="{{ old('descuento', $enPorcentaje ? (float) $orden->descuento_porcentaje : $orden->descuento) }}">
-                        </div>
-                    </div>
-                @endif
-            @endunless
-        </div>
-        <div class="campo">
-            <label for="diagnostico">Diagnóstico del mecánico</label>
-            <textarea id="diagnostico" name="diagnostico" @disabled(! $editableDiagnostico)>{{ old('diagnostico', $orden->diagnostico) }}</textarea>
-            @unless ($editableDiagnostico || $orden->estaCerrada())
-                <p class="ayuda">Disponible a partir de la fase de diagnóstico.</p>
-            @endunless
-        </div>
-        <div class="campo">
-            <label for="observaciones">Observaciones</label>
-            <textarea id="observaciones" name="observaciones" @disabled(! $editable)>{{ old('observaciones', $orden->observaciones) }}</textarea>
-        </div>
-        @if ($editable)
-            <button class="boton secundario">Guardar datos</button>
-        @endif
-    </form>
+    @include('ordenes._datos')
+    @endunless
 
     {{-- Trabajos --}}
     <div class="tarjeta">

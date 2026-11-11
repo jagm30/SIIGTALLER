@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Foto, firma o documento de una inspección, un daño o una orden.
@@ -80,5 +81,60 @@ class Adjunto extends Model
             'tomada_at' => now(),
             'subido_por_id' => $usuario?->id,
         ]);
+    }
+
+    /**
+     * La imagen como data URI para incrustarla en un PDF. Con $ancho se reduce a una miniatura
+     * JPEG 4:3 para que el PDF no cargue fotos de varios MB. Null si el archivo ya no está en disco.
+     */
+    public function dataUri(?int $ancho = null): ?string
+    {
+        $disco = Storage::disk($this->disk);
+        if (! $disco->exists($this->ruta)) {
+            return null;
+        }
+
+        $contenido = $disco->get($this->ruta);
+        if ($ancho === null) {
+            return 'data:' . $this->mime . ';base64,' . base64_encode($contenido);
+        }
+
+        $imagen = $this->enderezar(imagecreatefromstring($contenido), $contenido);
+
+        // Recorte centrado a 4:3 para que todas las miniaturas midan lo mismo en la hoja.
+        [$w, $h] = [imagesx($imagen), imagesy($imagen)];
+        $recorteW = min($w, (int) round($h * 4 / 3));
+        $recorteH = min($h, (int) round($w * 3 / 4));
+        $imagen = imagecrop($imagen, ['x' => intdiv($w - $recorteW, 2), 'y' => intdiv($h - $recorteH, 2), 'width' => $recorteW, 'height' => $recorteH]);
+        $miniatura = imagescale($imagen, min($ancho, $recorteW));
+
+        ob_start();
+        imagejpeg($miniatura, null, 75);
+
+        return 'data:image/jpeg;base64,' . base64_encode(ob_get_clean());
+    }
+
+    /** Las fotos del celular guardan su giro en EXIF; GD no lo aplica solo. */
+    private function enderezar(\GdImage $imagen, string $contenido): \GdImage
+    {
+        if ($this->mime !== 'image/jpeg' || ! function_exists('exif_read_data')) {
+            return $imagen;
+        }
+
+        $exif = exif_read_data('data://image/jpeg;base64,' . base64_encode($contenido));
+
+        return match ($exif['Orientation'] ?? 1) {
+            3 => imagerotate($imagen, 180, 0),
+            6 => imagerotate($imagen, -90, 0),
+            8 => imagerotate($imagen, 90, 0),
+            default => $imagen,
+        };
+    }
+
+    /** Borra el archivo del disco junto con su registro. */
+    public function eliminar(): void
+    {
+        Storage::disk($this->disk)->delete($this->ruta);
+        $this->delete();
     }
 }

@@ -46,6 +46,7 @@
     }
     textarea { min-height: 80px; }
     input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
+    input:disabled, select:disabled, textarea:disabled { background: #eef0f3; color: var(--tenue); cursor: not-allowed; }
     .casilla { display: flex; align-items: center; gap: .5rem; font-weight: 400; }
     .casilla input { flex-shrink: 0; }
     .casilla input { width: 22px; height: 22px; }
@@ -90,6 +91,11 @@
     .fotos figure { margin: 0; background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .4rem; transition: border-color .2s, background .2s; }
     .fotos figure.con-preview { border-color: var(--exito); background: #edf7f1; }
     .fotos figure.con-preview figcaption strong::after { content: ' ✓'; color: var(--exito); }
+    .fotos figure.subiendo { opacity: .7; }
+    .fotos figure.error-foto { border-color: var(--peligro); background: #fdeeee; }
+    .fotos .estado-foto { display: block; font-weight: 600; }
+    .fotos figure.con-preview .estado-foto { color: var(--exito); }
+    .fotos figure.error-foto .estado-foto { color: var(--peligro); }
     .fotos img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block; }
     .fotos figcaption { font-size: .8rem; margin-top: .25rem; }
 
@@ -139,4 +145,14 @@
     .matriz .nota { width: 34px; height: 34px; border: 0; background: none; color: #b8bfc8; font-size: 1rem; cursor: pointer; border-radius: 6px; }
     .matriz .nota.tiene { color: var(--primario); background: #e8f0fb; }
     .matriz .renglon-nota input { min-height: 34px; padding: .25rem .5rem; margin: 0 0 .3rem; font-size: .9rem; }
+    /* Hoja del QR para el cliente */
+    .hoja-qr { max-width: 420px; margin: 0 auto; text-align: center; }
+    .hoja-qr .marca-qr { font-weight: 700; font-size: 1.1rem; margin: 0 0 .5rem; }
+    .hoja-qr .imagen-qr svg { width: 260px; height: 260px; }
+    .hoja-qr .instruccion-qr { font-size: 1.05rem; }
+    @media print {
+        .barra, .no-imprimir, .contenido > .aviso { display: none !important; }
+        body { background: #fff; }
+        .hoja-qr { border: 0; }
+    }
 </style>
