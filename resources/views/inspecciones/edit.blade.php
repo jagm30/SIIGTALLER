@@ -132,7 +132,7 @@
                                     </tr>
                                 @endif
                                 @foreach ($puntos as $item)
-                                    @php($actual = old("respuestas.{$item->id}.valor", $respuestas[$item->id]->valor ?? null))
+                                    @php($actual = old("respuestas.{$item->id}.valor", $respuestas[$item->id]->valor ?? $item->valor_defecto))
                                     @php($comentario = old("respuestas.{$item->id}.comentario", $respuestas[$item->id]->comentario ?? null))
                                     <tr data-item data-tipo="{{ $tipo }}" @class(['obligatorio' => $item->obligatorio])>
                                         <th scope="row">
@@ -205,46 +205,25 @@
     </form>
 
     {{-- Fotos por ángulo --}}
-    @if ($inspeccion->firma)
-        {{-- Solo lectura: el cliente ya firmó, las fotos no se pueden cambiar --}}
-        <div class="tarjeta">
-            <h2>4. Fotos del vehículo</h2>
-            <div class="aviso alerta" style="margin-bottom: .75rem;">
-                El cliente ya firmó. Las fotos quedaron registradas y no se pueden modificar.
-            </div>
-            <div class="fotos">
-                @foreach ($angulos as $angulo)
-                    <figure>
-                        @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
-                            <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
-                        @endif
-                        <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
-                            <br><span class="tenue">{{ $angulo->descripcion }}</span></figcaption>
-                    </figure>
-                @endforeach
-            </div>
+    <div class="tarjeta">
+        <h2>4. Fotos del vehículo</h2>
+        <p class="ayuda">En la tableta, cada botón abre la cámara. La foto se guarda sola en cuanto la tomas.</p>
+        {{-- Cada foto se sube al elegirla (JavaScript). Si la subida falla, el campo conserva el archivo
+             y se vuelve a enviar con «Guardar avance» o «Guardar y completar». --}}
+        <div class="fotos" data-subir="{{ route('inspecciones.fotos', $inspeccion) }}">
+            @foreach ($angulos as $angulo)
+                <figure>
+                    @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
+                        <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
+                    @endif
+                    <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
+                        <br><span class="tenue">{{ $angulo->descripcion }}</span>
+                        <span class="estado-foto" aria-live="polite"></span></figcaption>
+                    <input type="file" name="fotos[{{ $angulo->id }}]" form="principal" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
+                </figure>
+            @endforeach
         </div>
-    @else
-        <div class="tarjeta">
-            <h2>4. Fotos del vehículo</h2>
-            <p class="ayuda">En la tableta, cada botón abre la cámara. La foto se guarda sola en cuanto la tomas.</p>
-            {{-- Cada foto se sube al elegirla (JavaScript). Si la subida falla, el campo conserva el archivo
-                 y se vuelve a enviar con «Guardar avance» o «Guardar y completar». --}}
-            <div class="fotos" data-subir="{{ route('inspecciones.fotos', $inspeccion) }}">
-                @foreach ($angulos as $angulo)
-                    <figure>
-                        @if ($foto = $fotosPorAngulo->get($angulo->id)?->last())
-                            <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $angulo->nombre }}"></a>
-                        @endif
-                        <figcaption><strong>{{ $angulo->nombre }}</strong>@if ($angulo->obligatorio) <span class="tenue">*</span>@endif
-                            <br><span class="tenue">{{ $angulo->descripcion }}</span>
-                            <span class="estado-foto" aria-live="polite"></span></figcaption>
-                        <input type="file" name="fotos[{{ $angulo->id }}]" form="principal" accept="image/*" capture="environment" style="width: 100%; margin-top: .35rem;">
-                    </figure>
-                @endforeach
-            </div>
-        </div>
-    @endif
+    </div>
 
     {{-- Daños: solo se muestra si marcaron «Sí, tiene daños». Si ya hay daños registrados no se oculta,
          para que se puedan ver o eliminar (marcar «sin daños» con daños registrados sale en los faltantes). --}}

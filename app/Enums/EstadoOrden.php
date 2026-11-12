@@ -5,7 +5,7 @@ namespace App\Enums;
 /**
  * Ciclo de vida de una orden de servicio.
  *
- * recibido → diagnostico → por_autorizar → en_reparacion ⇄ espera_refacciones → terminado → entregado
+ * recibido → diagnostico → en_reparacion ⇄ espera_refacciones → terminado → entregado
  * Solo se cancela antes de empezar la reparación.
  */
 enum EstadoOrden: string
@@ -38,7 +38,7 @@ enum EstadoOrden: string
     {
         return match ($this) {
             self::Recibido => [self::Diagnostico, self::Cancelado],
-            self::Diagnostico => [self::PorAutorizar, self::Cancelado],
+            self::Diagnostico => [self::EnReparacion, self::Cancelado],
             self::PorAutorizar => [self::EnReparacion, self::Cancelado],
             self::EnReparacion => [self::EsperaRefacciones, self::Terminado],
             self::EsperaRefacciones => [self::EnReparacion],

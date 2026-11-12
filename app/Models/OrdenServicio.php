@@ -266,8 +266,8 @@ class OrdenServicio extends Model
         $actual = $this->estado;
         $errores = [];
 
-        if (! $actual->puedePasarA($nuevo)) {
-            throw ValidationException::withMessages(['estado' => "No se puede pasar de «{$actual->label()}» a «{$nuevo->label()}»."]);
+        if ($actual === $nuevo) {
+            throw ValidationException::withMessages(['estado' => "La orden ya está en «{$nuevo->label()}»."]);
         }
 
         if (! $usuario->tieneRol(...$nuevo->rolesQuePuedenEntrar())) {

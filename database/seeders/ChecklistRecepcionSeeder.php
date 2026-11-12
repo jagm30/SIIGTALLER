@@ -20,7 +20,7 @@ class ChecklistRecepcionSeeder extends Seeder
 
         return [
             // Accesorios
-            ['accesorios', 'Llaves entregadas (cantidad)', 'numero', true, 'ambas', null],
+            ['accesorios', 'Llaves entregadas (cantidad)', 'numero', true, 'ambas', null, '1'],
             ['accesorios', 'Llave con control o control de alarma', 'si_no', true, 'ambas', null],
             ['accesorios', 'Gato', 'si_no', true, 'ambas', $A],
             ['accesorios', 'Llave de cruz o de birlos', 'si_no', true, 'ambas', $A],
@@ -109,10 +109,13 @@ class ChecklistRecepcionSeeder extends Seeder
     {
         $orden = [];
 
-        foreach ($this->items() as [$grupo, $nombre, $tipo, $obligatorio, $aplicaEn, $carrocerias]) {
+        foreach ($this->items() as $fila) {
+            [$grupo, $nombre, $tipo, $obligatorio, $aplicaEn, $carrocerias] = $fila;
+            $valorDefecto = $fila[6] ?? null;
+
             $orden[$grupo] = ($orden[$grupo] ?? 0) + 10;
 
-            ChecklistItem::withTrashed()->firstOrCreate(
+            $item = ChecklistItem::withTrashed()->firstOrCreate(
                 ['grupo' => $grupo, 'nombre' => $nombre],
                 [
                     'tipo_respuesta' => $tipo,
@@ -120,9 +123,15 @@ class ChecklistRecepcionSeeder extends Seeder
                     'aplica_en' => $aplicaEn,
                     'tipos_carroceria' => $carrocerias,
                     'orden' => $orden[$grupo],
+                    'valor_defecto' => $valorDefecto,
                     'activo' => true,
                 ],
             );
+
+            // Actualiza valor_defecto en registros ya existentes
+            if (! $item->wasRecentlyCreated && $item->valor_defecto !== $valorDefecto) {
+                $item->update(['valor_defecto' => $valorDefecto]);
+            }
         }
     }
 }

@@ -30,7 +30,7 @@ class PreferenciasOperacionSeeder extends Seeder
         ['recepcion', 'recepcion_permite_km_menor', 'bool', '1', 'Permite un kilometraje menor al anterior con justificación.'],
         ['recepcion', 'recepcion_terminos', 'text', 'El cliente declara que la información de esta hoja corresponde al estado en que entrega el vehículo, que retiró sus objetos de valor (salvo los indicados) y autoriza al taller a realizar el diagnóstico.', 'Leyenda que acepta el cliente al firmar. Ajústala con el taller.'],
         ['recepcion', 'recepcion_terminos_version', 'int', '1', 'Se incrementa cada vez que cambia el texto de los términos.'],
-        ['entrega', 'entrega_inspeccion_obligatoria', 'bool', '1', 'Exige la inspección de entrega completada antes de marcar la orden como entregada.'],
+        ['entrega', 'entrega_inspeccion_obligatoria', 'bool', '0', 'Exige la inspección de entrega completada antes de marcar la orden como entregada.'],
         ['recordatorios', 'recordatorios_activos', 'bool', '1', 'Programa el próximo servicio al entregar el vehículo.'],
         ['recordatorios', 'recordatorio_meses_default', 'int', '6', 'Meses para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin fecha).'],
         ['recordatorios', 'recordatorio_km_default', 'int', '10000', 'Kilómetros para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin km).'],

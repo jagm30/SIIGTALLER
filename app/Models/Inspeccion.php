@@ -162,10 +162,6 @@ class Inspeccion extends Model
             return [];
         }
 
-        if ($this->firma()->exists()) {
-            throw ValidationException::withMessages(['fotos' => 'El cliente ya firmó. No se pueden agregar fotos después de la firma.']);
-        }
-
         $angulos = AnguloFoto::whereIn('id', array_keys($archivos))->get()->keyBy('id');
 
         $fotos = [];

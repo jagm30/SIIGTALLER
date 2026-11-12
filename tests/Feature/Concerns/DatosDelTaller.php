@@ -93,7 +93,6 @@ trait DatosDelTaller
         $orden = $this->ordenConRecepcion($recepcion);
         $orden->update(['mecanico_responsable_id' => $mecanico->id]);
         $orden->cambiarEstado(EstadoOrden::Diagnostico, $mecanico);
-        $orden->cambiarEstado(EstadoOrden::PorAutorizar, $recepcion);
         $orden->cambiarEstado(EstadoOrden::EnReparacion, $recepcion);
 
         return $orden->refresh();

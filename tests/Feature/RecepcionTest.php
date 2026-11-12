@@ -310,13 +310,13 @@ class RecepcionTest extends TestCase
             ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]])
             ->assertForbidden();
 
-        // Después de la firma ya no se aceptan
+        // Después de la firma sí se aceptan fotos faltantes (la inspección sigue en borrador)
         $this->adjuntoFalso($orden->recepcion, \App\Enums\TipoAdjunto::Firma);
         $this->actingAs($this->recepcion)
             ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->image('f.jpg')]])
-            ->assertStatus(422)->assertJsonValidationErrors(['fotos' => 'El cliente ya firmó.']);
+            ->assertOk();
 
-        $this->assertSame(0, $orden->recepcion->fotos()->count());
+        $this->assertSame(1, $orden->recepcion->fotos()->count());
 
         // Completada: es evidencia, no se modifica
         $completada = $this->ordenConRecepcion($this->usuario(Rol::Recepcionista), $this->vehiculo(['placas' => 'XYZ-99-99']))->recepcion;
@@ -356,25 +356,24 @@ class RecepcionTest extends TestCase
         Storage::disk('local')->assertMissing($primera);
     }
 
-    public function test_no_se_pueden_subir_fotos_despues_de_que_el_cliente_firmo(): void
+    public function test_se_pueden_subir_fotos_faltantes_despues_de_que_el_cliente_firmo(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
         $inspeccion = $orden->recepcion;
-        $angulo = AnguloFoto::firstOrFail();
+        $angulos = AnguloFoto::take(2)->get();
 
-        // Antes de firmar: se puede subir foto sin problema
-        $this->actingAs($this->recepcion)
-            ->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('antes.jpg')]])
+        $this->actingAs($this->recepcion);
+
+        // El cliente firma con solo una foto tomada
+        $this->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulos[0]->id => UploadedFile::fake()->image('antes.jpg')]])
             ->assertSessionHas('ok');
-
-        // El cliente firma
         $this->adjuntoFalso($inspeccion, \App\Enums\TipoAdjunto::Firma);
 
-        // Después de firmar: se bloquea
-        $this->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulo->id => UploadedFile::fake()->image('despues.jpg')]])
-            ->assertSessionHasErrors(['fotos' => 'El cliente ya firmó. No se pueden agregar fotos después de la firma.']);
+        // Aunque el cliente ya firmó, se puede agregar la foto faltante (la inspección sigue en borrador)
+        $this->put(route('inspecciones.update', $inspeccion), ['fotos' => [$angulos[1]->id => UploadedFile::fake()->image('despues.jpg')]])
+            ->assertSessionHas('ok');
 
-        $this->assertSame(1, $inspeccion->fotos()->count(), 'Solo debe existir la foto subida antes de la firma');
+        $this->assertSame(2, $inspeccion->fresh()->fotos()->count(), 'Debe existir la foto previa y la recién agregada');
     }
 
     public function test_las_fotos_solo_las_ve_quien_puede_ver_la_orden(): void

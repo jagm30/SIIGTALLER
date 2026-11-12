@@ -28,6 +28,7 @@ class ChecklistItem extends Model
         'aplica_en',
         'tipos_carroceria',
         'orden',
+        'valor_defecto',
         'activo',
     ];
 

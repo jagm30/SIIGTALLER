@@ -101,7 +101,6 @@ class DatosDePruebaSeeder extends Seeder
         $o2->update(['mecanico_responsable_id' => $mecanico->id]);
         $o2->cambiarEstado(EstadoOrden::Diagnostico, $mecanico, 'Bujías desgastadas y filtro de aire saturado');
         $o2->update(['diagnostico' => 'Bujías desgastadas, filtro de aire saturado. Se recomienda afinación mayor.']);
-        $o2->cambiarEstado(EstadoOrden::PorAutorizar, $this->recepcion);
         $o2->cambiarEstado(EstadoOrden::EnReparacion, $this->recepcion, 'Cliente autorizó por teléfono');
         $this->agregarTrabajo($o2, $s['afinacion'], $mecanico);
         $this->agregarTrabajo($o2, $s['mano_obra'], $mecanico2, horas: 1.5, descripcion: 'Limpieza de cuerpo de aceleración');
@@ -112,7 +111,6 @@ class DatosDePruebaSeeder extends Seeder
         $this->completarInspeccion($o3->recepcion, 41250, 5, 'Carlos Martínez');
         $o3->update(['mecanico_responsable_id' => $mecanico->id]);
         $o3->cambiarEstado(EstadoOrden::Diagnostico, $mecanico);
-        $o3->cambiarEstado(EstadoOrden::PorAutorizar, $this->recepcion);
         $o3->cambiarEstado(EstadoOrden::EnReparacion, $this->recepcion);
         $this->agregarTrabajo($o3, $s['aceite'], $mecanico);
         $this->agregarTrabajo($o3, $s['frenos'], $mecanico, horas: 2);
@@ -125,7 +123,6 @@ class DatosDePruebaSeeder extends Seeder
         $o4 = OrdenServicio::abrir($np300, $this->recepcion, 'Revisión de suspensión', TipoOrden::Diagnostico);
         $this->completarInspeccion($o4->recepcion, 158240, 4, 'Roberto Chofer', esCliente: false);
         $o4->cambiarEstado(EstadoOrden::Diagnostico, $mecanico2, 'Bujes de horquilla dañados');
-        $o4->cambiarEstado(EstadoOrden::PorAutorizar, $this->recepcion);
         $o4->cambiarEstado(EstadoOrden::Cancelado, $this->recepcion, 'El cliente no autorizó el presupuesto');
 
         // Fechas de ingreso escalonadas para que se vean realistas en listados.

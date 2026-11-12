@@ -8,83 +8,214 @@
     $editable = ! $orden->estaCerrada();
     $editableDiagnostico = $orden->puedeEditarDiagnostico();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
-    // En diagnóstico lo importante es capturar: el formulario va arriba y no se muestran recepción ni entrega.
     $enDiagnostico = $orden->estado === \App\Enums\EstadoOrden::Diagnostico;
-    // Botones de estado: solo los siguientes pasos que el rol de este usuario puede dar.
-    $siguientes = collect($orden->estado->siguientes())->filter(fn ($e) => $user->tieneRol(...$e->rolesQuePuedenEntrar()));
+    $estadosDisponibles = collect(\App\Enums\EstadoOrden::cases())
+        ->filter(fn ($e) => $e !== $orden->estado && ! $orden->estaCerrada()
+            && $user->tieneRol(...$e->rolesQuePuedenEntrar()));
     $dinero = fn ($v) => $v === null ? '—' : '$' . number_format((float) $v, 2);
 @endphp
 
 @section('contenido')
+    {{-- Encabezado --}}
     <div class="encabezado">
         <div>
             <h1>Orden {{ $orden->folio }} <span class="etiqueta {{ $orden->estado->value }}">{{ $orden->estado->label() }}</span></h1>
             <p class="tenue">
-                {{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }} {{ $orden->vehiculo->anio }} · {{ $orden->vehiculo->placas ?? 'Sin placas' }}
+                {{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }} {{ $orden->vehiculo->anio }}
+                · {{ $orden->vehiculo->placas ?? 'Sin placas' }}
                 · {{ $orden->cliente->nombre_completo }} · {{ $orden->cliente->telefono }}
             </p>
         </div>
         <a href="{{ route('vehiculos.show', $orden->vehiculo) }}" class="boton secundario">Historial del vehículo</a>
     </div>
 
-    @if ($enDiagnostico)
-        @include('ordenes._datos')
-    @endif
-
-    {{-- Cambio de estado --}}
-    @if ($siguientes->isNotEmpty())
-        <form method="POST" action="{{ route('ordenes.estado', $orden) }}" class="tarjeta">
-            @csrf
-            <h2>Siguiente paso</h2>
-            <div class="fila">
-                <input type="text" name="comentario" placeholder="Comentario (obligatorio para cancelar)" style="flex: 1; min-width: 220px;">
-                @foreach ($siguientes as $s)
-                    <button name="estado" value="{{ $s->value }}" @class(['boton', 'peligro' => $s === \App\Enums\EstadoOrden::Cancelado, 'exito' => $s === \App\Enums\EstadoOrden::Entregado])>
-                        {{ $s === \App\Enums\EstadoOrden::Cancelado ? 'Cancelar orden' : 'Pasar a ' . $s->label() }}
-                    </button>
-                @endforeach
-            </div>
-        </form>
-    @endif
-
-    @unless ($enDiagnostico)
-    <div class="rejilla-2">
-        {{-- Recepción --}}
-        <div class="tarjeta">
-            <h2>Recepción</h2>
-            @include('ordenes._inspeccion', ['inspeccion' => $orden->recepcion, 'permiso' => 'recepcion.realizar'])
-            @if ($orden->recepcion->estaCompletada())
-                <p><a href="{{ route('ordenes.qr', $orden) }}" class="boton chico secundario">Imprimir QR del cliente</a></p>
+    {{-- ── Barra de acciones ──────────────────────────────────────────────────── --}}
+    @if ($puedeTrabajar || $estadosDisponibles->isNotEmpty() || $orden->recepcion?->estaCompletada())
+        <div class="acciones-orden" role="toolbar" aria-label="Acciones de la orden">
+            @if ($puedeTrabajar)
+                <button type="button" class="accion-btn" data-panel="panel-trabajo">
+                    <span class="accion-icono">＋</span> Agregar trabajo
+                </button>
+                <button type="button" class="accion-btn" data-panel="panel-refaccion">
+                    <span class="accion-icono">🔧</span> Agregar refacción
+                </button>
             @endif
-            <p class="chico"><strong>Motivo de ingreso:</strong> {{ $orden->motivo_ingreso }}</p>
-            <p class="chico tenue">Recibió: {{ $orden->recibidoPor->name }} · {{ $orden->fecha_ingreso->format('d/m/Y H:i') }}
-                @if ($orden->fecha_promesa) · Promesa: {{ $orden->fecha_promesa->format('d/m/Y') }} @endif</p>
+            @if ($estadosDisponibles->isNotEmpty())
+                <button type="button" class="accion-btn" data-panel="panel-estado">
+                    <span class="accion-icono">↕</span> Cambiar estado
+                </button>
+            @endif
+            @if ($orden->recepcion?->estaCompletada())
+                <a href="{{ route('inspecciones.pdf', $orden->recepcion) }}" class="accion-btn" target="_blank">
+                    <span class="accion-icono">📄</span> PDF recepción
+                </a>
+                <a href="{{ route('ordenes.qr', $orden) }}" class="accion-btn" target="_blank">
+                    <span class="accion-icono">◼</span> Imprimir QR
+                </a>
+            @endif
         </div>
 
-        {{-- Entrega --}}
-        <div class="tarjeta">
-            <h2>Entrega</h2>
-            @if ($orden->entrega)
-                @include('ordenes._inspeccion', ['inspeccion' => $orden->entrega, 'permiso' => 'entrega.realizar'])
-            @elseif ($orden->estado === \App\Enums\EstadoOrden::Terminado && $user->tienePermiso('entrega.realizar'))
-                <p>El vehículo está terminado. Revisa con el cliente el reporte de recepción y anota las observaciones finales.</p>
-                <form method="POST" action="{{ route('ordenes.entrega', $orden) }}">
+        {{-- Panel: Agregar trabajo --}}
+        @if ($puedeTrabajar)
+            <div id="panel-trabajo" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('trabajos.store', $orden) }}">
                     @csrf
-                    <button class="boton">Iniciar entrega</button>
+                    <h3>Agregar trabajo</h3>
+                    @php($serviciosEnOrden = $orden->trabajos->pluck('servicio_id')->filter())
+                    <div class="rejilla">
+                        <div class="campo">
+                            <label for="servicio_id">Servicio</label>
+                            <select id="servicio_id" name="servicio_id" required data-otro="#trabajo-otro" data-valor-otro="otro">
+                                <option value="">Elige un servicio…</option>
+                                @foreach ($servicios as $s)
+                                    <option value="{{ $s->id }}"
+                                        data-sugeridas="{{ $s->refacciones_sugeridas_count }}"
+                                        @if ($serviciosEnOrden->contains($s->id)) data-ya-esta @endif>
+                                        {{ $s->nombre }} · {{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif
+                                        @if ($serviciosEnOrden->contains($s->id)) (ya está en la orden) @endif
+                                    </option>
+                                @endforeach
+                                <option value="otro">Otro trabajo (escribirlo)…</option>
+                            </select>
+                        </div>
+                        <div class="campo">
+                            <label for="cantidad">Cantidad u horas</label>
+                            <input type="number" id="cantidad" name="cantidad" step="0.25" min="0.25" value="1">
+                        </div>
+                        @unless ($user->esMecanico())
+                            <div class="campo">
+                                <label for="mecanicos">Mecánicos</label>
+                                <select id="mecanicos" name="mecanicos[]" multiple size="3">
+                                    @foreach ($mecanicos as $m)
+                                        <option value="{{ $m->id }}" @selected($orden->mecanico_responsable_id === $m->id)>{{ $m->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endunless
+                    </div>
+
+                    <div id="trabajo-otro" class="rejilla" hidden>
+                        <div class="campo">
+                            <label for="descripcion">Describe el trabajo</label>
+                            <input type="text" id="descripcion" name="descripcion" maxlength="200" data-requerido>
+                        </div>
+                        <div class="campo">
+                            <label for="tipo_cobro">Tipo de cobro</label>
+                            <select id="tipo_cobro" name="tipo_cobro">
+                                @foreach (\App\Enums\TipoCobro::opciones() as $valor => $texto)
+                                    <option value="{{ $valor }}">{{ $texto }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @if ($verPrecios)
+                            <div class="campo">
+                                <label for="precio_unitario">Precio con IVA <span class="tenue">(por hora si se cobra por hora)</span></label>
+                                <input type="number" id="precio_unitario" name="precio_unitario" step="0.01" min="0">
+                            </div>
+                        @endif
+                    </div>
+
+                    <p id="aviso-repetido" class="aviso alerta" hidden>
+                        Este servicio ya está en la orden. Si es el mismo trabajo, mejor cambia la cantidad del que ya existe.
+                        Si es otro (por ejemplo, en otra pieza del auto), puedes agregarlo.
+                    </p>
+                    <label id="casilla-sugeridas" class="casilla campo" hidden>
+                        <input type="checkbox" name="agregar_sugeridas" value="1" checked> Agregar las refacciones que normalmente lleva el servicio
+                    </label>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton">Guardar trabajo</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
                 </form>
-            @else
-                <p class="tenue">Se hace cuando la orden esté terminada.</p>
-            @endif
-            @if ($orden->fecha_entrega)
-                <p class="chico tenue">Entregó: {{ $orden->entregadoPor?->name }} · {{ $orden->fecha_entrega->format('d/m/Y H:i') }}</p>
-            @endif
-        </div>
-    </div>
+            </div>
 
-    @include('ordenes._datos')
-    @endunless
+            {{-- Panel: Agregar refacción --}}
+            <div id="panel-refaccion" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('refacciones-usadas.store', $orden) }}">
+                    @csrf
+                    <h3>Agregar refacción</h3>
+                    <p class="tenue chico">Si la pieza ya está en la orden para el mismo trabajo, se suma a ese renglón.</p>
+                    <div class="rejilla">
+                        <div class="campo">
+                            <label for="refaccion_id">Refacción</label>
+                            <select id="refaccion_id" name="refaccion_id" required data-otro="#refaccion-otra" data-valor-otro="otra">
+                                <option value="">Elige una refacción…</option>
+                                @foreach ($refaccionesCatalogo as $rc)
+                                    <option value="{{ $rc->id }}">{{ $rc->descripcion }} @if ($rc->marca)· {{ $rc->marca }}@endif</option>
+                                @endforeach
+                                <option value="otra">Otra refacción (escribirla)…</option>
+                            </select>
+                        </div>
+                        <div class="campo">
+                            <label for="ref_cantidad">Cantidad</label>
+                            <input type="number" id="ref_cantidad" name="cantidad" step="any" min="0.001" value="1" required>
+                        </div>
+                        <div class="campo">
+                            <label for="orden_servicio_item_id">Para el trabajo</label>
+                            <select id="orden_servicio_item_id" name="orden_servicio_item_id">
+                                <option value="">— Ninguno en particular —</option>
+                                @foreach ($orden->trabajos as $t)
+                                    <option value="{{ $t->id }}">{{ $t->descripcion }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
 
-    {{-- Trabajos --}}
+                    <div id="refaccion-otra" class="rejilla" hidden>
+                        <div class="campo">
+                            <label for="ref_descripcion">Nombre de la pieza</label>
+                            <input type="text" id="ref_descripcion" name="descripcion" maxlength="200" data-requerido>
+                        </div>
+                        <div class="campo">
+                            <label for="ref_numero_parte">Número de parte <span class="tenue">(opcional)</span></label>
+                            <input type="text" id="ref_numero_parte" name="numero_parte" maxlength="50">
+                        </div>
+                        @if ($verPrecios)
+                            <div class="campo">
+                                <label for="ref_precio">Precio unitario con IVA</label>
+                                <input type="number" id="ref_precio" name="precio_unitario" step="0.01" min="0">
+                            </div>
+                        @endif
+                    </div>
+                    <label class="casilla campo" style="margin-top: .5rem;"><input type="checkbox" name="proporcionada_por_cliente" value="1"> La trajo el cliente</label>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton">Guardar refacción</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
+        {{-- Panel: Cambiar estado --}}
+        @if ($estadosDisponibles->isNotEmpty())
+            <div id="panel-estado" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('ordenes.estado', $orden) }}">
+                    @csrf
+                    <h3>Cambiar estado</h3>
+                    <div class="rejilla">
+                        <div class="campo">
+                            <label for="select-estado">Nuevo estado</label>
+                            <select name="estado" id="select-estado">
+                                @foreach ($estadosDisponibles as $e)
+                                    <option value="{{ $e->value }}">{{ $e->label() }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="campo">
+                            <label for="comentario-estado">Comentario</label>
+                            <input type="text" name="comentario" id="comentario-estado" placeholder="Obligatorio para cancelar">
+                        </div>
+                    </div>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton">Aplicar</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+    @endif
+
+    {{-- ── Trabajos realizados ────────────────────────────────────────────────── --}}
     <div class="tarjeta">
         <h2>Trabajos realizados</h2>
         <div class="tabla-scroll">
@@ -117,7 +248,6 @@
                         @if ($verPrecios)
                             <td class="derecha">
                                 @if ($t->precio_unitario === null && $puedeTrabajar)
-                                    {{-- Quedó sin precio (lo registró alguien que no ve precios): se completa aquí --}}
                                     @include('ordenes._falta_precio', ['accion' => route('trabajos.precio', $t)])
                                 @else
                                     {{ $dinero($t->importe) }}
@@ -140,80 +270,9 @@
                 </tbody>
             </table>
         </div>
-
-        @if ($puedeTrabajar)
-            <form method="POST" action="{{ route('trabajos.store', $orden) }}" style="margin-top: 1rem;">
-                @csrf
-                <h3>Agregar trabajo</h3>
-                @php($serviciosEnOrden = $orden->trabajos->pluck('servicio_id')->filter())
-                <div class="rejilla">
-                    <div class="campo">
-                        <label for="servicio_id">Servicio</label>
-                        {{-- "Otro trabajo" muestra los campos para escribirlo (ver script al final) --}}
-                        <select id="servicio_id" name="servicio_id" required data-otro="#trabajo-otro" data-valor-otro="otro">
-                            <option value="">Elige un servicio…</option>
-                            @foreach ($servicios as $s)
-                                <option value="{{ $s->id }}"
-                                    data-sugeridas="{{ $s->refacciones_sugeridas_count }}"
-                                    @if ($serviciosEnOrden->contains($s->id)) data-ya-esta @endif>
-                                    {{ $s->nombre }} · {{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif
-                                    @if ($serviciosEnOrden->contains($s->id)) (ya está en la orden) @endif
-                                </option>
-                            @endforeach
-                            <option value="otro">Otro trabajo (escribirlo)…</option>
-                        </select>
-                    </div>
-                    <div class="campo">
-                        <label for="cantidad">Cantidad u horas</label>
-                        <input type="number" id="cantidad" name="cantidad" step="0.25" min="0.25" value="1">
-                    </div>
-                    @unless ($user->esMecanico())
-                        <div class="campo">
-                            <label for="mecanicos">Mecánicos</label>
-                            <select id="mecanicos" name="mecanicos[]" multiple size="3">
-                                @foreach ($mecanicos as $m)
-                                    <option value="{{ $m->id }}" @selected($orden->mecanico_responsable_id === $m->id)>{{ $m->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    @endunless
-                </div>
-
-                {{-- Solo aparece al elegir "Otro trabajo" --}}
-                <div id="trabajo-otro" class="rejilla" hidden>
-                    <div class="campo">
-                        <label for="descripcion">Describe el trabajo</label>
-                        <input type="text" id="descripcion" name="descripcion" maxlength="200" data-requerido>
-                    </div>
-                    <div class="campo">
-                        <label for="tipo_cobro">Tipo de cobro</label>
-                        <select id="tipo_cobro" name="tipo_cobro">
-                            @foreach (\App\Enums\TipoCobro::opciones() as $valor => $texto)
-                                <option value="{{ $valor }}">{{ $texto }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    @if ($verPrecios)
-                        <div class="campo">
-                            <label for="precio_unitario">Precio con IVA <span class="tenue">(por hora si se cobra por hora)</span></label>
-                            <input type="number" id="precio_unitario" name="precio_unitario" step="0.01" min="0">
-                        </div>
-                    @endif
-                </div>
-
-                <p id="aviso-repetido" class="aviso alerta" hidden>
-                    Este servicio ya está en la orden. Si es el mismo trabajo, mejor cambia la cantidad del que ya existe.
-                    Si es otro (por ejemplo, en otra pieza del auto), puedes agregarlo.
-                </p>
-                <label id="casilla-sugeridas" class="casilla campo" hidden>
-                    <input type="checkbox" name="agregar_sugeridas" value="1" checked> Agregar las refacciones que normalmente lleva el servicio
-                </label>
-                <button class="boton">Agregar trabajo</button>
-            </form>
-        @endif
     </div>
 
-    {{-- Refacciones --}}
+    {{-- ── Refacciones utilizadas ─────────────────────────────────────────────── --}}
     <div class="tarjeta">
         <h2>Refacciones utilizadas</h2>
         <div class="tabla-scroll">
@@ -251,62 +310,9 @@
                 </tbody>
             </table>
         </div>
-
-        @if ($puedeTrabajar)
-            <form method="POST" action="{{ route('refacciones-usadas.store', $orden) }}" style="margin-top: 1rem;">
-                @csrf
-                <h3>Agregar refacción</h3>
-                <p class="tenue chico">Si la pieza ya está en la orden para el mismo trabajo, se suma a ese renglón.</p>
-                <div class="rejilla">
-                    <div class="campo">
-                        <label for="refaccion_id">Refacción</label>
-                        <select id="refaccion_id" name="refaccion_id" required data-otro="#refaccion-otra" data-valor-otro="otra">
-                            <option value="">Elige una refacción…</option>
-                            @foreach ($refaccionesCatalogo as $rc)
-                                <option value="{{ $rc->id }}">{{ $rc->descripcion }} @if ($rc->marca)· {{ $rc->marca }}@endif</option>
-                            @endforeach
-                            <option value="otra">Otra refacción (escribirla)…</option>
-                        </select>
-                    </div>
-                    <div class="campo">
-                        <label for="ref_cantidad">Cantidad</label>
-                        <input type="number" id="ref_cantidad" name="cantidad" step="any" min="0.001" value="1" required>
-                    </div>
-                    <div class="campo">
-                        <label for="orden_servicio_item_id">Para el trabajo</label>
-                        <select id="orden_servicio_item_id" name="orden_servicio_item_id">
-                            <option value="">— Ninguno en particular —</option>
-                            @foreach ($orden->trabajos as $t)
-                                <option value="{{ $t->id }}">{{ $t->descripcion }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-
-                {{-- Solo aparece al elegir "Otra refacción" --}}
-                <div id="refaccion-otra" class="rejilla" hidden>
-                    <div class="campo">
-                        <label for="ref_descripcion">Nombre de la pieza</label>
-                        <input type="text" id="ref_descripcion" name="descripcion" maxlength="200" data-requerido>
-                    </div>
-                    <div class="campo">
-                        <label for="ref_numero_parte">Número de parte <span class="tenue">(opcional)</span></label>
-                        <input type="text" id="ref_numero_parte" name="numero_parte" maxlength="50">
-                    </div>
-                    @if ($verPrecios)
-                        <div class="campo">
-                            <label for="ref_precio">Precio unitario con IVA</label>
-                            <input type="number" id="ref_precio" name="precio_unitario" step="0.01" min="0">
-                        </div>
-                    @endif
-                </div>
-                <label class="casilla campo"><input type="checkbox" name="proporcionada_por_cliente" value="1"> La trajo el cliente</label>
-                <button class="boton">Agregar refacción</button>
-            </form>
-        @endif
     </div>
 
-    {{-- Totales: solo para quien puede ver precios --}}
+    {{-- ── Totales ────────────────────────────────────────────────────────────── --}}
     @if ($verPrecios)
         <div class="tarjeta" style="max-width: 360px; margin-left: auto;">
             <table>
@@ -317,7 +323,42 @@
         </div>
     @endif
 
-    {{-- Bitácora --}}
+    {{-- ── Diagnóstico y datos generales ─────────────────────────────────────── --}}
+    @include('ordenes._datos')
+
+    {{-- ── Recepción y entrega ────────────────────────────────────────────────── --}}
+    <div class="rejilla-2">
+        <div class="tarjeta">
+            <h2>Recepción</h2>
+            @include('ordenes._inspeccion', ['inspeccion' => $orden->recepcion, 'permiso' => 'recepcion.realizar'])
+            @if ($orden->recepcion->estaCompletada())
+                <p><a href="{{ route('ordenes.qr', $orden) }}" class="boton chico secundario">Imprimir QR del cliente</a></p>
+            @endif
+            <p class="chico"><strong>Motivo de ingreso:</strong> {{ $orden->motivo_ingreso }}</p>
+            <p class="chico tenue">Recibió: {{ $orden->recibidoPor->name }} · {{ $orden->fecha_ingreso->format('d/m/Y H:i') }}
+                @if ($orden->fecha_promesa) · Promesa: {{ $orden->fecha_promesa->format('d/m/Y') }} @endif</p>
+        </div>
+
+        <div class="tarjeta">
+            <h2>Entrega</h2>
+            @if ($orden->entrega)
+                @include('ordenes._inspeccion', ['inspeccion' => $orden->entrega, 'permiso' => 'entrega.realizar'])
+            @elseif ($orden->estado === \App\Enums\EstadoOrden::Terminado && $user->tienePermiso('entrega.realizar'))
+                <p>El vehículo está terminado. Revisa con el cliente el reporte de recepción y anota las observaciones finales.</p>
+                <form method="POST" action="{{ route('ordenes.entrega', $orden) }}">
+                    @csrf
+                    <button class="boton">Iniciar entrega</button>
+                </form>
+            @else
+                <p class="tenue">Se hace cuando la orden esté terminada.</p>
+            @endif
+            @if ($orden->fecha_entrega)
+                <p class="chico tenue">Entregó: {{ $orden->entregadoPor?->name }} · {{ $orden->fecha_entrega->format('d/m/Y H:i') }}</p>
+            @endif
+        </div>
+    </div>
+
+    {{-- ── Bitácora ────────────────────────────────────────────────────────────── --}}
     <div class="tarjeta">
         <h2>Historial de la orden</h2>
         @foreach ($orden->bitacoraEstados as $b)
@@ -332,33 +373,116 @@
 @endsection
 
 @push('scripts')
+<style>
+    .acciones-orden {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        background: #fff;
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        padding: .6rem .75rem;
+        margin-bottom: 1rem;
+    }
+    .accion-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        min-height: 44px;
+        padding: .5rem 1.1rem;
+        background: #f4f5f7;
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        font: inherit;
+        font-size: 1rem;
+        cursor: pointer;
+        color: var(--texto);
+        transition: background .15s, border-color .15s;
+    }
+    .accion-btn:hover { background: #e8eaed; }
+    .accion-btn.activo {
+        background: var(--primario);
+        border-color: var(--primario);
+        color: #fff;
+    }
+    .accion-icono { font-style: normal; font-size: 1.1em; }
+    .panel-accion {
+        background: #fff;
+        border: 2px solid var(--primario);
+        border-radius: var(--radio);
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .panel-accion h3 { margin: 0 0 1rem; font-size: 1.1rem; }
+</style>
 <script>
-    // Selectores con opción "Otro/Otra": muestra los campos para escribirlo solo cuando se elige esa opción.
-    // Los campos ocultos se desactivan para que no se envíen con datos viejos.
+    // ── Barra de acciones: un solo panel abierto a la vez ──────────────────────
+    const botonesAccion = document.querySelectorAll('.accion-btn[data-panel]');
+
+    botonesAccion.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const panelId = btn.dataset.panel;
+            const panel = document.getElementById(panelId);
+            const yaActivo = btn.classList.contains('activo');
+
+            // Cierra todo
+            botonesAccion.forEach(b => b.classList.remove('activo'));
+            document.querySelectorAll('.panel-accion').forEach(p => p.hidden = true);
+
+            // Si no estaba activo, lo abre
+            if (! yaActivo) {
+                btn.classList.add('activo');
+                panel.hidden = false;
+                panel.querySelector('input, select, textarea')?.focus();
+                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    });
+
+    // Botón "Cancelar" dentro de un panel
+    document.querySelectorAll('[data-cerrar-panel]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            botonesAccion.forEach(b => b.classList.remove('activo'));
+            document.querySelectorAll('.panel-accion').forEach(p => p.hidden = true);
+        });
+    });
+
+    // Comentario obligatorio al seleccionar "Cancelado"
+    (function () {
+        const sel = document.getElementById('select-estado');
+        const com = document.getElementById('comentario-estado');
+        if (! sel || ! com) return;
+        function actualizar() {
+            const esCancelado = sel.value === '{{ \App\Enums\EstadoOrden::Cancelado->value }}';
+            com.placeholder = esCancelado ? 'Motivo de cancelación (obligatorio)' : 'Comentario (opcional)';
+            com.required = esCancelado;
+        }
+        sel.addEventListener('change', actualizar);
+        actualizar();
+    })();
+
+    // Selectores con opción "Otro/Otra"
     document.querySelectorAll('select[data-otro]').forEach(function (select) {
         const grupo = document.querySelector(select.dataset.otro);
 
         function actualizar() {
             const esOtro = select.value === select.dataset.valorOtro;
             grupo.hidden = ! esOtro;
-            grupo.querySelectorAll('input, select').forEach(function (campo) { campo.disabled = ! esOtro; });
-            grupo.querySelectorAll('[data-requerido]').forEach(function (campo) { campo.required = esOtro; });
+            grupo.querySelectorAll('input, select').forEach(c => c.disabled = ! esOtro);
+            grupo.querySelectorAll('[data-requerido]').forEach(c => c.required = esOtro);
         }
 
         select.addEventListener('change', function () {
             actualizar();
-            if (select.value === select.dataset.valorOtro) {
-                grupo.querySelector('input').focus();
-            }
+            if (select.value === select.dataset.valorOtro) grupo.querySelector('input').focus();
         });
         actualizar();
     });
 
-    // Al elegir un servicio: avisa si ya está en la orden y decide la casilla de refacciones sugeridas.
+    // Al elegir un servicio: avisa si ya está y decide casilla de sugeridas
     (function () {
         const servicio = document.getElementById('servicio_id');
         if (! servicio) return;
-
         const aviso = document.getElementById('aviso-repetido');
         const casilla = document.getElementById('casilla-sugeridas');
         const marcar = casilla.querySelector('input');
@@ -367,10 +491,8 @@
             const opcion = servicio.selectedOptions[0];
             const yaEsta = opcion.hasAttribute('data-ya-esta');
             const tieneSugeridas = Number(opcion.dataset.sugeridas || 0) > 0;
-
             aviso.hidden = ! yaEsta;
             casilla.hidden = ! tieneSugeridas;
-            // Si el servicio se repite, no duplicamos sus piezas a menos que lo pidan.
             marcar.checked = tieneSugeridas && ! yaEsta;
         }
 

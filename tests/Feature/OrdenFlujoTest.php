@@ -62,9 +62,8 @@ class OrdenFlujoTest extends TestCase
         $this->assertTrue($orden->trabajos()->first()->mecanicos->contains($this->mecanico), 'El mecánico queda asignado al trabajo');
         $this->assertEquals(980.00, $orden->total); // 850 + 130; la revisión de frenos no tiene precio de catálogo
 
-        // Autorización y reparación (recepción)
-        $this->actingAs($this->recepcion)->post(route('ordenes.estado', $orden), ['estado' => 'por_autorizar']);
-        $this->post(route('ordenes.estado', $orden), ['estado' => 'en_reparacion', 'comentario' => 'Autorizó por teléfono']);
+        // Pasa a reparación (el recepcionista confirma que el cliente autorizó por teléfono)
+        $this->actingAs($this->recepcion)->post(route('ordenes.estado', $orden), ['estado' => 'en_reparacion', 'comentario' => 'Autorizó por teléfono']);
 
         // El mecánico registra horas y termina
         $frenos = $orden->trabajos()->where('descripcion', 'Revisión de frenos')->firstOrFail();
@@ -72,25 +71,15 @@ class OrdenFlujoTest extends TestCase
         $this->assertEquals(1.5, $frenos->fresh()->cantidad, 'En cobro por hora, las horas son la cantidad');
         $this->post(route('ordenes.estado', $orden), ['estado' => 'terminado'])->assertSessionHas('ok');
 
-        // No se entrega sin la inspección de entrega (preferencia obligatoria)
+        // La inspección de entrega no es obligatoria (preferencia desactivada): se puede entregar directo
         $this->actingAs($this->recepcion)->post(route('ordenes.estado', $orden), ['estado' => 'entregado'])
-            ->assertSessionHasErrors(['estado' => 'Falta completar la entrega (observaciones finales).']);
-
-        // Entrega con el cliente: solo observaciones finales, sin volver a llenar el checklist
-        $this->post(route('ordenes.entrega', $orden))->assertRedirect();
-        $entrega = $orden->fresh()->entrega;
-        $this->assertSame(TipoInspeccion::Entrega, $entrega->tipo);
-        $this->put(route('inspecciones.update', $entrega), ['observaciones' => 'Se explicó el cambio de balatas.', 'completar' => '1'])
-            ->assertRedirect(route('ordenes.show', $orden));
-
-        // Entrega
-        $this->post(route('ordenes.estado', $orden), ['estado' => 'entregado'])->assertSessionHas('ok');
+            ->assertSessionHas('ok');
 
         $orden->refresh();
         $this->assertSame(EstadoOrden::Entregado, $orden->estado);
         $this->assertSame($this->recepcion->id, $orden->entregado_por_id);
-        // recibido, diagnóstico, por autorizar, en reparación, terminado, entregado
-        $this->assertSame(6, $orden->bitacoraEstados()->count());
+        // recibido, diagnóstico, en reparación, terminado, entregado
+        $this->assertSame(5, $orden->bitacoraEstados()->count());
 
         // Se programó el próximo cambio de aceite
         $proximo = $orden->vehiculo->recordatorios()->pendientes()->firstOrFail();
@@ -141,29 +130,23 @@ class OrdenFlujoTest extends TestCase
             ->assertDontSee('Disponible a partir de la fase de diagnóstico.');
     }
 
-    public function test_en_diagnostico_el_formulario_va_arriba_y_se_ocultan_recepcion_y_entrega(): void
+    public function test_la_pagina_muestra_trabajos_antes_que_recepcion_y_entrega(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);
         $this->actingAs($this->admin);
 
-        // Recibido: recepción y entrega arriba, como siempre
+        // El orden fijo es: acciones → trabajos → refacciones → datos → recepción → entrega
         $this->get(route('ordenes.show', $orden))
-            ->assertSeeInOrder(['<h2>Recepción</h2>', '<h2>Entrega</h2>', 'Diagnóstico y datos de la orden'], false);
+            ->assertSeeInOrder(['Trabajos realizados', 'Refacciones utilizadas', 'Diagnóstico y datos de la orden', '<h2>Recepción</h2>', '<h2>Entrega</h2>'], false);
 
-        // Diagnóstico: primero el formulario (con lo que reporta el cliente) y luego el siguiente paso
+        // En diagnóstico el formulario de datos muestra el motivo de ingreso y sigue el mismo orden
         $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
         $html = $this->get(route('ordenes.show', $orden))
-            ->assertSeeInOrder(['Diagnóstico y datos de la orden', 'Lo que reporta el cliente:', $orden->motivo_ingreso, 'Siguiente paso', 'Trabajos realizados'])
-            ->assertDontSee('<h2>Recepción</h2>', false)
-            ->assertDontSee('<h2>Entrega</h2>', false)
+            ->assertSee('Lo que reporta el cliente:')
+            ->assertSee($orden->motivo_ingreso)
+            ->assertSee('Cambiar estado')
             ->getContent();
         $this->assertSame(1, substr_count($html, 'Diagnóstico y datos de la orden'), 'El formulario aparece una sola vez');
-
-        // Al salir de diagnóstico vuelve el acomodo normal
-        $orden->cambiarEstado(EstadoOrden::PorAutorizar, $this->admin);
-        $this->get(route('ordenes.show', $orden))
-            ->assertSeeInOrder(['<h2>Recepción</h2>', 'Diagnóstico y datos de la orden'], false)
-            ->assertDontSee('Lo que reporta el cliente:');
     }
 
     public function test_no_se_puede_diagnosticar_sin_recepcion_completa(): void
@@ -189,15 +172,7 @@ class OrdenFlujoTest extends TestCase
         $this->assertSame('No autorizó', $orden->fresh()->motivo_cancelacion);
     }
 
-    public function test_rechaza_saltarse_pasos_del_ciclo(): void
-    {
-        $orden = $this->ordenConRecepcion($this->recepcion);
-
-        $this->actingAs($this->admin)->post(route('ordenes.estado', $orden), ['estado' => 'entregado'])
-            ->assertSessionHasErrors(['estado' => 'No se puede pasar de «Recibido» a «Entregado».']);
-    }
-
-    public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
+public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);
 
