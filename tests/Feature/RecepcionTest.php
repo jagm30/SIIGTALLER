@@ -324,6 +324,33 @@ class RecepcionTest extends TestCase
             ->assertStatus(409);
     }
 
+    public function test_los_errores_de_la_foto_se_explican_en_espanol(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $angulo = AnguloFoto::firstOrFail();
+        $url = route('inspecciones.fotos', $orden->recepcion);
+
+        $this->actingAs($this->recepcion)
+            ->postJson($url, ['fotos' => [$angulo->id => UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf')]])
+            ->assertJsonValidationErrors(['fotos.' . $angulo->id => 'Foto debe ser una imagen.']);
+
+        // PHP descarta la foto si pesa más que upload_max_filesize (lo que pasaba con la cámara del iPad)
+        $demasiadoPesada = new UploadedFile(UploadedFile::fake()->image('camara.jpg')->getPathname(), 'camara.jpg', 'image/jpeg', UPLOAD_ERR_INI_SIZE, true);
+        $this->postJson($url, ['fotos' => [$angulo->id => $demasiadoPesada]])
+            ->assertJsonValidationErrors(['fotos.' . $angulo->id => 'pesa más de lo que permite el servidor']);
+
+        $this->assertSame(0, $orden->recepcion->fotos()->count());
+    }
+
+    public function test_la_pantalla_reduce_las_fotos_antes_de_subirlas(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+
+        $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
+            ->assertSee('function reducirFoto', false)
+            ->assertSee("'image/jpeg', 0.85", false);
+    }
+
     public function test_los_errores_de_validacion_salen_debajo_de_los_botones_de_guardar(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
@@ -334,7 +361,7 @@ class RecepcionTest extends TestCase
             ->put(route('inspecciones.update', $orden->recepcion), ['nivel_combustible' => 20])
             ->assertRedirect($pantalla);
         $html = $this->get($pantalla)
-            ->assertSeeInOrder(['Guardar y completar', 'Revisa lo siguiente:', 'nivel de gasolina'])
+            ->assertSeeInOrder(['Guardar y completar', 'Revisa lo siguiente:', 'Nivel de gasolina debe estar entre 0 y 8.'])
             ->getContent();
         $this->assertSame(1, substr_count($html, 'Revisa lo siguiente:'), 'El error ya no se repite arriba de la pantalla');
 

@@ -566,6 +566,56 @@
 
         contar();
     })();
+    // ── Fotos: reducir antes de subir ────────────────────────────
+    // La cámara del iPad entrega fotos de varios MB y a veces en HEIC, que el servidor rechaza.
+    // Antes de subirlas se redimensionan y se convierten a JPEG. Si el navegador no puede
+    // leer la imagen, se manda el archivo original y el servidor decide.
+    const LADO_MAXIMO_FOTO = 1920;
+
+    function reducirFoto(archivo) {
+        return new Promise(function (resolve) {
+            const url = URL.createObjectURL(archivo);
+            const img = new Image();
+            img.onerror = function () { URL.revokeObjectURL(url); resolve(archivo); };
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+                const escala = Math.min(1, LADO_MAXIMO_FOTO / Math.max(img.naturalWidth, img.naturalHeight));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.naturalWidth * escala);
+                canvas.height = Math.round(img.naturalHeight * escala);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(function (blob) {
+                    if (! blob) return resolve(archivo);
+                    const nombre = (archivo.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+                    resolve(new File([blob], nombre, { type: 'image/jpeg', lastModified: archivo.lastModified }));
+                }, 'image/jpeg', 0.85);
+            };
+            img.src = url;
+        });
+    }
+
+    // Deja la foto reducida en el campo, para que «Guardar» mande esa y no la original.
+    function ponerEnCampo(input, archivo) {
+        if (typeof DataTransfer !== 'function') return;
+        const dt = new DataTransfer();
+        dt.items.add(archivo);
+        input.files = dt.files;
+    }
+
+    // Foto del daño: viaja con su formulario normal, así que se reduce en el campo mismo.
+    (function () {
+        const input = document.getElementById('foto');
+        if (! input) return;
+        const boton = input.form.querySelector('button');
+
+        input.addEventListener('change', async function () {
+            const original = input.files && input.files[0];
+            if (! original) return;
+            boton.disabled = true;
+            ponerEnCampo(input, await reducirFoto(original));
+            boton.disabled = false;
+        });
+    })();
     // ── Fotos: se suben solas al tomarlas ────────────────────────
     // Al elegir una foto (cámara o galería) se muestra de inmediato y se sube en segundo plano.
     // Si se sube bien, el campo se vacía para que «Guardar» no la mande otra vez; si falla,
@@ -581,14 +631,14 @@
             input.addEventListener('change', async function () {
                 const fig = input.closest('figure');
                 const estado = fig.querySelector('.estado-foto');
-                const archivo = input.files && input.files[0];
+                const original = input.files && input.files[0];
                 let guardada = fig.querySelector('a');
                 let preview = fig.querySelector('.foto-preview');
 
                 fig.classList.remove('con-preview', 'subiendo', 'error-foto');
                 estado.textContent = '';
 
-                if (! archivo) {
+                if (! original) {
                     // Canceló la cámara: vuelve a mostrar la foto que ya estaba
                     if (preview) preview.remove();
                     if (guardada) guardada.hidden = false;
@@ -601,11 +651,16 @@
                     preview.alt = 'Vista previa';
                     fig.prepend(preview);
                 }
-                preview.src = URL.createObjectURL(archivo);
+                preview.src = URL.createObjectURL(original);
                 if (guardada) guardada.hidden = true;
 
                 const miEnvio = ++envio;
                 fig.classList.add('subiendo');
+                estado.textContent = 'Preparando…';
+
+                const archivo = await reducirFoto(original);
+                if (miEnvio !== envio) return;
+                ponerEnCampo(input, archivo);
                 estado.textContent = 'Subiendo…';
 
                 const datos = new FormData();
@@ -640,8 +695,13 @@
                         // Foto rechazada (no es imagen, ya firmó…): reenviarla haría fallar todo el guardado
                         mensaje = (Object.values(json.errors || {})[0]?.[0] || json.message) + ' Toma otra foto.';
                         input.value = '';
+                    } else if (r.status === 413) {
+                        mensaje = 'La foto pesa más de lo que permite el servidor. Toma otra foto.';
+                        input.value = '';
+                    } else if (r.status === 419) {
+                        mensaje = 'La sesión expiró. Recarga la página y vuelve a tomar la foto.';
                     } else {
-                        mensaje = (json.message || 'No se pudo subir.') + ' Se intentará de nuevo al guardar.';
+                        mensaje = 'No se pudo subir (error ' + r.status + '). Se intentará de nuevo al guardar.';
                     }
                 } catch (e) {
                     if (miEnvio !== envio) return;
