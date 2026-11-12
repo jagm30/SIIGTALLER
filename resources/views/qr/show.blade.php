@@ -34,7 +34,7 @@
             @endif
         </div>
 
-        <div class="tarjeta">
+        <div class="tarjeta" id="historial">
             <h2>Servicios realizados</h2>
             @forelse ($ordenes as $orden)
                 <div style="border-bottom: 1px solid var(--borde); padding: .6rem 0;">

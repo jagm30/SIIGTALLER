@@ -22,7 +22,7 @@
             <p class="instruccion-qr">Escanea este código para ver el estado de tu vehículo y su historial de servicio.</p>
             <p><strong>{{ $vehiculo->marca->nombre }} {{ $vehiculo->modelo->nombre }} {{ $vehiculo->anio }}</strong><br>
                 {{ $vehiculo->placas ?? 'Sin placas' }} · Orden {{ $orden->folio }} · {{ $orden->fecha_ingreso->format('d/m/Y') }}</p>
-            <p class="chico tenue">{{ $vehiculo->urlPublica() }}</p>
+            <p class="chico"><a href="{{ $vehiculo->urlPublica() }}#historial" target="_blank" class="enlace-qr">{{ $vehiculo->urlPublica() }}</a></p>
         </div>
     @else
         <div class="aviso alerta">El QR de este vehículo está desactivado, así que no hay nada que imprimir.</div>

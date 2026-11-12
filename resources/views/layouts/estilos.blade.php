@@ -157,6 +157,8 @@
     .hoja-qr .marca-qr { font-weight: 700; font-size: 1.1rem; margin: 0 0 .5rem; }
     .hoja-qr .imagen-qr svg { width: 260px; height: 260px; }
     .hoja-qr .instruccion-qr { font-size: 1.05rem; }
+    /* La dirección no tiene espacios: sin esto se sale de la tarjeta */
+    .hoja-qr .enlace-qr { overflow-wrap: anywhere; color: var(--tenue); }
     @media print {
         .barra, .no-imprimir, .contenido > .aviso { display: none !important; }
         body { background: #fff; }

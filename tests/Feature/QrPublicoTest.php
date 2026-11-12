@@ -141,6 +141,18 @@ class QrPublicoTest extends TestCase
         $this->get(route('ordenes.show', $orden))->assertSee('Imprimir QR del cliente');
     }
 
+    public function test_el_link_de_la_hoja_del_qr_abre_el_historial_de_servicio(): void
+    {
+        $recepcion = $this->usuario(Rol::Recepcionista);
+        $orden = OrdenServicio::abrir($this->vehiculo(), $recepcion, 'Servicio general');
+        $url = route('qr.show', $orden->vehiculo->qr_token);
+
+        $this->actingAs($recepcion)->get(route('ordenes.qr', $orden))
+            ->assertSee('<a href="' . $url . '#historial" target="_blank" class="enlace-qr">', false);
+
+        $this->get($url)->assertSee('id="historial"', false);
+    }
+
     public function test_si_el_qr_esta_desactivado_la_hoja_no_muestra_el_codigo(): void
     {
         $recepcion = $this->usuario(Rol::Recepcionista);
