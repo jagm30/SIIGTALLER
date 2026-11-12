@@ -118,7 +118,7 @@ class OrdenServicioController extends Controller
         ]);
     }
 
-    /** Datos generales: mecánico responsable, diagnóstico, observaciones, fecha promesa y descuento. */
+    /** Datos generales: mecánico responsable, observaciones, fecha promesa y descuento. */
     public function update(Request $request, OrdenServicio $orden): RedirectResponse
     {
         Gate::authorize('ver-orden', $orden);
@@ -130,7 +130,6 @@ class OrdenServicioController extends Controller
 
         $datos = $request->validate([
             'mecanico_responsable_id' => ['nullable', Rule::exists('users', 'id')->where('rol', Rol::Mecanico->value)],
-            'diagnostico' => ['nullable', 'string', 'max:5000'],
             'observaciones' => ['nullable', 'string', 'max:5000'],
             'fecha_promesa' => ['nullable', 'date'],
             // El descuento puede ser una cantidad en pesos o un porcentaje del subtotal.
@@ -140,14 +139,10 @@ class OrdenServicioController extends Controller
 
         // Cada rol solo cambia lo que le corresponde.
         if ($user->esMecanico()) {
-            $datos = array_intersect_key($datos, array_flip(['diagnostico', 'observaciones']));
+            $datos = array_intersect_key($datos, array_flip(['observaciones']));
         }
         if (! $user->can('precios.ver', $orden)) {
             unset($datos['descuento']);
-        }
-        // El diagnóstico solo se puede editar a partir de la fase de diagnóstico.
-        if (! $orden->puedeEditarDiagnostico()) {
-            unset($datos['diagnostico']);
         }
 
         $tipoDescuento = $datos['descuento_tipo'] ?? 'monto';

@@ -6,9 +6,7 @@
     $user = auth()->user();
     $verPrecios = $user->can('precios.ver', $orden);
     $editable = ! $orden->estaCerrada();
-    $editableDiagnostico = $orden->puedeEditarDiagnostico();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
-    $enDiagnostico = $orden->estado === \App\Enums\EstadoOrden::Diagnostico;
     $estadosDisponibles = collect(\App\Enums\EstadoOrden::enUsoTodos())
         ->filter(fn ($e) => $e !== $orden->estado && ! $orden->estaCerrada()
             && $user->tieneRol(...$e->rolesQuePuedenEntrar()));
@@ -323,7 +321,7 @@
         </div>
     @endif
 
-    {{-- ── Diagnóstico y datos generales ─────────────────────────────────────── --}}
+    {{-- ── Datos generales ────────────────────────────────────────────────────── --}}
     @include('ordenes._datos')
 
     {{-- ── Recepción y entrega ────────────────────────────────────────────────── --}}

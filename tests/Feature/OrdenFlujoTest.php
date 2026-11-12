@@ -49,13 +49,13 @@ class OrdenFlujoTest extends TestCase
         $this->post(route('ordenes.estado', $orden), ['estado' => 'diagnostico'])->assertSessionHasErrors('estado');
         $this->actingAs($this->mecanico)->post(route('ordenes.estado', $orden), ['estado' => 'diagnostico', 'comentario' => 'Revisando'])->assertSessionHas('ok');
 
-        // El mecánico registra diagnóstico y el trabajo con sus piezas sugeridas
-        $this->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado', 'descuento' => 500])->assertSessionHas('ok');
+        // El mecánico registra observaciones y el trabajo con sus piezas sugeridas
+        $this->patch(route('ordenes.update', $orden), ['observaciones' => 'Aceite degradado', 'descuento' => 500])->assertSessionHas('ok');
         $this->post(route('trabajos.store', $orden), ['servicio_id' => $aceite->id, 'agregar_sugeridas' => '1'])->assertSessionHas('ok');
         $this->post(route('trabajos.store', $orden), ['descripcion' => 'Revisión de frenos', 'tipo_cobro' => 'por_hora', 'cantidad' => 1])->assertSessionHas('ok');
 
         $orden->refresh();
-        $this->assertSame('Aceite degradado', $orden->diagnostico);
+        $this->assertSame('Aceite degradado', $orden->observaciones);
         $this->assertEquals(0, $orden->descuento, 'El mecánico no puede poner descuentos');
         $this->assertSame(2, $orden->trabajos()->count());
         $this->assertSame(1, $orden->refacciones()->count(), 'Agrega el filtro sugerido');
@@ -91,43 +91,20 @@ class OrdenFlujoTest extends TestCase
         $this->actingAs($this->admin)->get(route('ordenes.show', $orden))->assertOk()->assertSee('Entregado')->assertDontSee('Agregar trabajo');
     }
 
-    public function test_diagnostico_no_se_puede_editar_en_estado_recibido(): void
+    public function test_la_orden_ya_no_tiene_formulario_de_diagnostico(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);
         $orden->update(['mecanico_responsable_id' => $this->mecanico->id]);
-        $this->assertSame(\App\Enums\EstadoOrden::Recibido, $orden->estado);
-
-        // Recepción intenta guardar el diagnóstico antes de que el mecánico empiece
-        $this->actingAs($this->recepcion)
-            ->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado'])
-            ->assertSessionHas('ok');
-
-        // El diagnóstico debe seguir vacío: el campo fue ignorado por el servidor
-        $this->assertNull($orden->fresh()->diagnostico);
-
-        // Una vez en fase de diagnóstico, sí se puede guardar
-        $orden->cambiarEstado(\App\Enums\EstadoOrden::Diagnostico, $this->mecanico);
-        $this->actingAs($this->mecanico)
-            ->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado'])
-            ->assertSessionHas('ok');
-
-        $this->assertSame('Aceite degradado', $orden->fresh()->diagnostico);
-    }
-
-    public function test_el_campo_diagnostico_aparece_bloqueado_hasta_la_fase_de_diagnostico(): void
-    {
-        $orden = $this->ordenConRecepcion($this->recepcion);
-        $orden->update(['mecanico_responsable_id' => $this->mecanico->id]);
-
-        $this->actingAs($this->mecanico)->get(route('ordenes.show', $orden))
-            ->assertSee('<textarea id="diagnostico" name="diagnostico" disabled>', false)
-            ->assertSee('Disponible a partir de la fase de diagnóstico.');
-
         $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
 
-        $this->get(route('ordenes.show', $orden))
-            ->assertSee('<textarea id="diagnostico" name="diagnostico" >', false)
-            ->assertDontSee('Disponible a partir de la fase de diagnóstico.');
+        $this->actingAs($this->mecanico)->get(route('ordenes.show', $orden))
+            ->assertSee('Datos de la orden')
+            ->assertDontSee('name="diagnostico"', false)
+            ->assertDontSee('Diagnóstico del mecánico');
+
+        // Si alguien lo manda a mano, el servidor lo ignora
+        $this->patch(route('ordenes.update', $orden), ['diagnostico' => 'Aceite degradado'])->assertSessionHas('ok');
+        $this->assertNull($orden->fresh()->diagnostico);
     }
 
     public function test_la_pagina_muestra_trabajos_antes_que_recepcion_y_entrega(): void
@@ -137,16 +114,15 @@ class OrdenFlujoTest extends TestCase
 
         // El orden fijo es: acciones → trabajos → refacciones → datos → recepción → entrega
         $this->get(route('ordenes.show', $orden))
-            ->assertSeeInOrder(['Trabajos realizados', 'Refacciones utilizadas', 'Diagnóstico y datos de la orden', '<h2>Recepción</h2>', '<h2>Entrega</h2>'], false);
+            ->assertSeeInOrder(['Trabajos realizados', 'Refacciones utilizadas', '<h2>Datos de la orden</h2>', '<h2>Recepción</h2>', '<h2>Entrega</h2>'], false);
 
-        // En diagnóstico el formulario de datos muestra el motivo de ingreso y sigue el mismo orden
+        // En diagnóstico se mantiene el mismo orden y el motivo de ingreso sigue a la vista en Recepción
         $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
         $html = $this->get(route('ordenes.show', $orden))
-            ->assertSee('Lo que reporta el cliente:')
-            ->assertSee($orden->motivo_ingreso)
+            ->assertSeeInOrder(['<h2>Recepción</h2>', $orden->motivo_ingreso], false)
             ->assertSee('Cambiar estado')
             ->getContent();
-        $this->assertSame(1, substr_count($html, 'Diagnóstico y datos de la orden'), 'El formulario aparece una sola vez');
+        $this->assertSame(1, substr_count($html, '<h2>Datos de la orden</h2>'), 'El formulario aparece una sola vez');
     }
 
     public function test_no_se_puede_diagnosticar_sin_recepcion_completa(): void

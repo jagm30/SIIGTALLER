@@ -1,11 +1,7 @@
-{{-- Diagnóstico y datos generales de la orden. Usa las variables de ordenes/show ($user, $editable, $verPrecios…). --}}
+{{-- Datos generales de la orden. Usa las variables de ordenes/show ($user, $editable, $verPrecios…). --}}
 <form method="POST" action="{{ route('ordenes.update', $orden) }}" class="tarjeta">
     @csrf @method('PATCH')
-    <h2>Diagnóstico y datos de la orden</h2>
-    @if ($enDiagnostico)
-        {{-- Recepción no se muestra en este paso; lo que reportó el cliente sí hace falta para diagnosticar --}}
-        <p class="aviso alerta"><strong>Lo que reporta el cliente:</strong> {{ $orden->motivo_ingreso }}</p>
-    @endif
+    <h2>Datos de la orden</h2>
     <div class="rejilla">
         @unless ($user->esMecanico())
             <div class="campo">
@@ -37,13 +33,6 @@
                     </div>
                 </div>
             @endif
-        @endunless
-    </div>
-    <div class="campo">
-        <label for="diagnostico">Diagnóstico del mecánico</label>
-        <textarea id="diagnostico" name="diagnostico" @disabled(! $editableDiagnostico)>{{ old('diagnostico', $orden->diagnostico) }}</textarea>
-        @unless ($editableDiagnostico || $orden->estaCerrada())
-            <p class="ayuda">Disponible a partir de la fase de diagnóstico.</p>
         @endunless
     </div>
     <div class="campo">
