@@ -176,7 +176,7 @@ class OrdenServicioController extends Controller
         Gate::authorize('ver-orden', $orden);
 
         $datos = $request->validate([
-            'estado' => ['required', Rule::enum(EstadoOrden::class)],
+            'estado' => ['required', Rule::enum(EstadoOrden::class)->only(EstadoOrden::enUsoTodos())],
             'comentario' => ['nullable', 'string', 'max:255'],
         ]);
 

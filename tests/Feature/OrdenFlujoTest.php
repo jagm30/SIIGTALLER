@@ -172,6 +172,34 @@ class OrdenFlujoTest extends TestCase
         $this->assertSame('No autorizó', $orden->fresh()->motivo_cancelacion);
     }
 
+    public function test_el_estado_por_autorizar_ya_no_se_puede_elegir(): void
+    {
+        $orden = $this->ordenConRecepcion($this->recepcion);
+
+        // Ni en el menú de la orden ni en el filtro de la lista
+        $this->actingAs($this->admin)->get(route('ordenes.show', $orden))
+            ->assertOk()->assertDontSee('value="por_autorizar"', false)->assertSee('value="diagnostico"', false);
+        $this->get(route('ordenes.index'))->assertDontSee('Por autorizar');
+
+        // Ni mandándolo a mano
+        $this->post(route('ordenes.estado', $orden), ['estado' => 'por_autorizar'])->assertSessionHasErrors('estado');
+        $this->assertSame(EstadoOrden::Recibido, $orden->fresh()->estado);
+        $this->assertNotContains(EstadoOrden::PorAutorizar, EstadoOrden::abiertos());
+    }
+
+    public function test_las_ordenes_que_pasaron_por_autorizar_se_siguen_viendo(): void
+    {
+        $orden = $this->ordenConRecepcion($this->recepcion);
+        $orden->bitacoraEstados()->create([
+            'estado_anterior' => EstadoOrden::Diagnostico,
+            'estado_nuevo' => EstadoOrden::PorAutorizar,
+            'user_id' => $this->admin->id,
+        ]);
+
+        // La bitácora vieja conserva su historia
+        $this->actingAs($this->admin)->get(route('ordenes.show', $orden))->assertOk()->assertSee('Por autorizar');
+    }
+
 public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);

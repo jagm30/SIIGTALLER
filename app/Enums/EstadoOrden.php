@@ -12,6 +12,7 @@ enum EstadoOrden: string
 {
     case Recibido = 'recibido';
     case Diagnostico = 'diagnostico';
+    // Ya no se usa: solo queda para poder leer la bitácora de órdenes viejas. Ver enUso().
     case PorAutorizar = 'por_autorizar';
     case EnReparacion = 'en_reparacion';
     case EsperaRefacciones = 'espera_refacciones';
@@ -39,7 +40,7 @@ enum EstadoOrden: string
         return match ($this) {
             self::Recibido => [self::Diagnostico, self::Cancelado],
             self::Diagnostico => [self::EnReparacion, self::Cancelado],
-            self::PorAutorizar => [self::EnReparacion, self::Cancelado],
+            self::PorAutorizar => [],
             self::EnReparacion => [self::EsperaRefacciones, self::Terminado],
             self::EsperaRefacciones => [self::EnReparacion],
             self::Terminado => [self::Entregado],
@@ -69,13 +70,26 @@ enum EstadoOrden: string
             self::Diagnostico, self::EsperaRefacciones, self::Terminado => [Rol::Administrador, Rol::Mecanico],
             // Recepción registra la autorización del cliente; el mecánico la retoma al llegar la pieza.
             self::EnReparacion => [Rol::Administrador, Rol::Recepcionista, Rol::Mecanico],
-            self::Recibido, self::PorAutorizar, self::Entregado, self::Cancelado => [Rol::Administrador, Rol::Recepcionista],
+            self::Recibido, self::Entregado, self::Cancelado => [Rol::Administrador, Rol::Recepcionista],
+            self::PorAutorizar => [],
         };
+    }
+
+    /** ¿Se puede elegir hoy? Falso para estados retirados que solo existen en la bitácora. */
+    public function enUso(): bool
+    {
+        return $this !== self::PorAutorizar;
+    }
+
+    /** @return list<self> estados que se muestran y se pueden elegir. */
+    public static function enUsoTodos(): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $e) => $e->enUso()));
     }
 
     /** @return list<self> estados de una orden abierta (vehículo dentro del taller). */
     public static function abiertos(): array
     {
-        return array_values(array_filter(self::cases(), fn (self $e) => ! $e->esCerrado()));
+        return array_values(array_filter(self::enUsoTodos(), fn (self $e) => ! $e->esCerrado()));
     }
 }

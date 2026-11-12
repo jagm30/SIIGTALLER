@@ -14,7 +14,7 @@
         <input type="search" name="buscar" value="{{ $buscar }}" placeholder="Folio o placas" style="flex: 1; min-width: 180px;">
         <select name="estado" style="width: auto;">
             <option value="">Todos los estados</option>
-            @foreach (\App\Enums\EstadoOrden::cases() as $e)
+            @foreach (\App\Enums\EstadoOrden::enUsoTodos() as $e)
                 <option value="{{ $e->value }}" @selected($estado === $e)>{{ $e->label() }}</option>
             @endforeach
         </select>

@@ -9,7 +9,7 @@
     $editableDiagnostico = $orden->puedeEditarDiagnostico();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
     $enDiagnostico = $orden->estado === \App\Enums\EstadoOrden::Diagnostico;
-    $estadosDisponibles = collect(\App\Enums\EstadoOrden::cases())
+    $estadosDisponibles = collect(\App\Enums\EstadoOrden::enUsoTodos())
         ->filter(fn ($e) => $e !== $orden->estado && ! $orden->estaCerrada()
             && $user->tieneRol(...$e->rolesQuePuedenEntrar()));
     $dinero = fn ($v) => $v === null ? '—' : '$' . number_format((float) $v, 2);
