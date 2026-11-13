@@ -56,14 +56,23 @@
                 </div>
                 <div class="campo">
                     <label for="nivel_combustible">Nivel de gasolina</label>
-                    <select id="nivel_combustible" name="nivel_combustible">
-                        <option value="">—</option>
-                        @for ($i = 0; $i <= 8; $i++)
-                            <option value="{{ $i }}" @selected((string) old('nivel_combustible', $inspeccion->nivel_combustible) === (string) $i)>
-                                {{ ['Vacío', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8', 'Lleno'][$i] }}
-                            </option>
-                        @endfor
-                    </select>
+                    <div style="display:flex; align-items:center; gap:.75rem;">
+                        <select id="nivel_combustible" name="nivel_combustible" style="flex:1;">
+                            <option value="">—</option>
+                            @for ($i = 0; $i <= 8; $i++)
+                                <option value="{{ $i }}" @selected((string) old('nivel_combustible', $inspeccion->nivel_combustible) === (string) $i)>
+                                    {{ ['Vacío', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8', 'Lleno'][$i] }}
+                                </option>
+                            @endfor
+                        </select>
+                        {{-- Indicador visual del nivel de gasolina --}}
+                        <svg id="gasolina-gauge" width="28" height="52" viewBox="0 0 28 52" aria-hidden="true" style="flex-shrink:0;">
+                            <text x="1" y="8" font-size="7" font-weight="700" fill="#66727f" font-family="system-ui,sans-serif">F</text>
+                            <rect x="2" y="10" width="20" height="32" rx="3" fill="none" stroke="#b8bfc8" stroke-width="1.5"/>
+                            <rect id="gasolina-fill-rect" x="3.5" y="41" width="17" height="0" rx="2" fill="#1e7a46" style="transition:height .25s,y .25s,fill .25s;"/>
+                            <text x="1" y="50" font-size="7" font-weight="700" fill="#66727f" font-family="system-ui,sans-serif">E</text>
+                        </svg>
+                    </div>
                 </div>
                 <div class="campo">
                     <label for="placas">Placas con las que llegó</label>
@@ -175,30 +184,31 @@
 
         <div class="tarjeta">
             <h2>3. Daños y objetos de valor</h2>
-            <div class="rejilla">
-                <div class="campo">
-                    <label>¿El vehículo tiene daños visibles?</label>
-                    <div class="opciones">
-                        <label><input type="radio" name="sin_danios" value="1" @checked(old('sin_danios', $inspeccion->sin_danios) === true || old('sin_danios') === '1')><span>No, sin daños</span></label>
-                        <label><input type="radio" name="sin_danios" value="0" @checked(old('sin_danios', $inspeccion->sin_danios) === false || old('sin_danios') === '0')><span>Sí, tiene daños</span></label>
-                    </div>
-                    <p class="ayuda">Si tiene daños, regístralos abajo con su foto.</p>
+            <div class="campo">
+                <label>¿El vehículo tiene daños visibles?</label>
+                <div class="opciones">
+                    <label><input type="radio" name="sin_danios" value="1" @checked(old('sin_danios', $inspeccion->sin_danios) === true || old('sin_danios') === '1')><span>No, sin daños</span></label>
+                    <label><input type="radio" name="sin_danios" value="0" @checked(old('sin_danios', $inspeccion->sin_danios) === false || old('sin_danios') === '0')><span>Sí, tiene daños</span></label>
                 </div>
-                <div class="campo">
-                    <label>¿El cliente retiró sus objetos de valor?</label>
-                    <div class="opciones">
-                        <label><input type="radio" name="cliente_retiro_valores" value="1" @checked(old('cliente_retiro_valores', $inspeccion->cliente_retiro_valores) === true || old('cliente_retiro_valores') === '1')><span>Sí</span></label>
-                        <label><input type="radio" name="cliente_retiro_valores" value="0" @checked(old('cliente_retiro_valores', $inspeccion->cliente_retiro_valores) === false || old('cliente_retiro_valores') === '0')><span>No</span></label>
-                    </div>
-                </div>
+                <p class="ayuda">Si tiene daños, regístralos abajo con su foto.</p>
             </div>
             <div class="campo">
-                <label for="objetos_personales">Objetos que se quedan en el vehículo</label>
-                <textarea id="objetos_personales" name="objetos_personales" placeholder="Ej. silla para bebé en asiento trasero">{{ old('objetos_personales', $inspeccion->objetos_personales) }}</textarea>
+                <label>¿El cliente retiró sus objetos de valor?</label>
+                <div class="opciones">
+                    <label><input type="radio" name="cliente_retiro_valores" value="1" @checked(old('cliente_retiro_valores', $inspeccion->cliente_retiro_valores) === true || old('cliente_retiro_valores') === '1')><span>Sí</span></label>
+                    <label><input type="radio" name="cliente_retiro_valores" value="0" @checked(old('cliente_retiro_valores', $inspeccion->cliente_retiro_valores) === false || old('cliente_retiro_valores') === '0')><span>No</span></label>
+                </div>
             </div>
-            <div class="campo">
-                <label for="observaciones">Observaciones generales</label>
-                <textarea id="observaciones" name="observaciones">{{ old('observaciones', $inspeccion->observaciones) }}</textarea>
+            @php($mostrarCaptura = old('sin_danios') !== null ? old('sin_danios') === '0' : $inspeccion->sin_danios === false)
+            <div id="danios-captura" @unless($mostrarCaptura) hidden @endunless>
+                <div class="campo">
+                    <label for="objetos_personales">Objetos que se quedan en el vehículo</label>
+                    <textarea id="objetos_personales" name="objetos_personales" placeholder="Ej. silla para bebé en asiento trasero">{{ old('objetos_personales', $inspeccion->objetos_personales) }}</textarea>
+                </div>
+                <div class="campo">
+                    <label for="observaciones">Observaciones generales</label>
+                    <textarea id="observaciones" name="observaciones">{{ old('observaciones', $inspeccion->observaciones) }}</textarea>
+                </div>
             </div>
             <button class="boton secundario">Guardar avance</button>
         </div>
@@ -451,12 +461,14 @@
             campo.value = '';
         });
 
-        // La sección de daños aparece al marcar «Sí, tiene daños» (o si ya hay daños registrados).
-        const seccionDanios = document.getElementById('seccion-danios');
+        // La sección de daños y los campos de captura aparecen al marcar «Sí, tiene daños».
+        const seccionDanios  = document.getElementById('seccion-danios');
+        const daniosCaptura  = document.getElementById('danios-captura');
         document.querySelectorAll('input[name=sin_danios]').forEach((radio) => {
             radio.addEventListener('change', () => {
                 const conDanios = document.querySelector('input[name=sin_danios][value="0"]').checked;
                 seccionDanios.hidden = ! conDanios && seccionDanios.dataset.registrados === '0';
+                daniosCaptura.hidden = ! conDanios;
             });
         });
 
@@ -488,6 +500,28 @@
                 }
             });
         });
+    })();
+    // ── Indicador de gasolina ────────────────────────────────────
+    (function () {
+        const sel  = document.getElementById('nivel_combustible');
+        const fill = document.getElementById('gasolina-fill-rect');
+        if (!sel || !fill) return;
+
+        // Interior del tanque: y va de 11 a 41 → 30 px de altura total.
+        const TANK_INTERIOR_H  = 30;
+        const TANK_BOTTOM_Y    = 41; // y del borde inferior interior
+
+        function actualizar(val) {
+            const nivel = val === '' ? NaN : parseInt(val, 10);
+            if (isNaN(nivel)) { fill.setAttribute('height', '0'); return; }
+            const h = Math.round((nivel / 8) * TANK_INTERIOR_H);
+            fill.setAttribute('height', h);
+            fill.setAttribute('y', TANK_BOTTOM_Y - h);
+            fill.setAttribute('fill', nivel <= 2 ? '#b3261e' : nivel <= 4 ? '#a86b00' : '#1e7a46');
+        }
+
+        sel.addEventListener('change', (e) => actualizar(e.target.value));
+        actualizar(sel.value);
     })();
     // ── Checklist compacto ──────────────────────────────────────
     (function () {

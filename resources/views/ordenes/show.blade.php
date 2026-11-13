@@ -7,9 +7,26 @@
     $verPrecios = $user->can('precios.ver', $orden);
     $editable = ! $orden->estaCerrada();
     $puedeTrabajar = $user->tienePermiso('ordenes.trabajar') && $editable && $orden->estado !== \App\Enums\EstadoOrden::Recibido;
+    $avanceBloqueado = $orden->estado === \App\Enums\EstadoOrden::PorAutorizar;
     $estadosDisponibles = collect(\App\Enums\EstadoOrden::enUsoTodos())
         ->filter(fn ($e) => $e !== $orden->estado && ! $orden->estaCerrada()
             && $user->tieneRol(...$e->rolesQuePuedenEntrar()));
+    $puedeIniciarDiagnostico =
+        $orden->estado === \App\Enums\EstadoOrden::Recibido
+        && $orden->recepcion?->estaCompletada()
+        && $user->tieneRol(...\App\Enums\EstadoOrden::PorAutorizar->rolesQuePuedenEntrar());
+    $puedeAutorizar =
+        $orden->estado === \App\Enums\EstadoOrden::PorAutorizar
+        && $user->tieneRol(...\App\Enums\EstadoOrden::EnReparacion->rolesQuePuedenEntrar());
+    $hayPresupuesto = $orden->trabajos->isNotEmpty() || $orden->refacciones->isNotEmpty();
+    $puedeTerminar =
+        in_array($orden->estado, [\App\Enums\EstadoOrden::EnReparacion, \App\Enums\EstadoOrden::EsperaRefacciones])
+        && $user->tieneRol(...\App\Enums\EstadoOrden::Terminado->rolesQuePuedenEntrar());
+    $puedeEntregar =
+        $orden->estado === \App\Enums\EstadoOrden::Terminado
+        && $user->tienePermiso('entrega.realizar');
+    $todosTerminados = $orden->trabajos->isNotEmpty()
+        && $orden->trabajos->every(fn ($t) => $t->estado === \App\Enums\EstadoTrabajo::Terminado);
     $dinero = fn ($v) => $v === null ? '—' : '$' . number_format((float) $v, 2);
 @endphp
 
@@ -28,8 +45,32 @@
     </div>
 
     {{-- ── Barra de acciones ──────────────────────────────────────────────────── --}}
-    @if ($puedeTrabajar || $estadosDisponibles->isNotEmpty() || $orden->recepcion?->estaCompletada())
+    @if ($puedeTrabajar || $puedeIniciarDiagnostico || $puedeAutorizar || $puedeTerminar || $puedeEntregar || $estadosDisponibles->isNotEmpty() || $orden->recepcion?->estaCompletada())
         <div class="acciones-orden" role="toolbar" aria-label="Acciones de la orden">
+            @if ($puedeIniciarDiagnostico)
+                <button type="button" class="accion-btn accion-destacado" data-panel="panel-diagnostico">
+                    <span class="accion-icono">🔍</span> Ir al diagnóstico
+                </button>
+            @endif
+            @if ($puedeAutorizar)
+                <button type="button" class="accion-btn accion-destacado accion-exito"
+                        data-panel="panel-autorizar"
+                        @unless($hayPresupuesto) disabled title="Registra al menos un trabajo o una refacción antes de autorizar" @endunless>
+                    <span class="accion-icono">✓</span> Cliente autorizó
+                </button>
+            @endif
+            @if ($puedeEntregar)
+                <button type="button" class="accion-btn accion-destacado accion-exito" data-panel="panel-entregar">
+                    <span class="accion-icono">🚗</span> Entregar vehículo
+                </button>
+            @endif
+            @if ($puedeTerminar)
+                <button type="button" class="accion-btn accion-destacado accion-exito"
+                        data-panel="panel-terminado"
+                        @unless($todosTerminados) disabled title="Marca todos los trabajos como «Terminado» antes de cerrar la orden" @endunless>
+                    <span class="accion-icono">🏁</span> Trabajo terminado
+                </button>
+            @endif
             @if ($puedeTrabajar)
                 <button type="button" class="accion-btn" data-panel="panel-trabajo">
                     <span class="accion-icono">＋</span> Agregar trabajo
@@ -49,6 +90,11 @@
                 </a>
                 <a href="{{ route('ordenes.qr', $orden) }}" class="accion-btn" target="_blank">
                     <span class="accion-icono">◼</span> Imprimir QR
+                </a>
+            @endif
+            @if ($orden->estado === \App\Enums\EstadoOrden::Entregado && $orden->entrega?->estaCompletada())
+                <a href="{{ route('inspecciones.pdf', $orden->entrega) }}" class="accion-btn" target="_blank">
+                    <span class="accion-icono">📄</span> PDF entrega
                 </a>
             @endif
         </div>
@@ -184,6 +230,90 @@
             </div>
         @endif
 
+        {{-- Panel: Ir al diagnóstico --}}
+        @if ($puedeIniciarDiagnostico)
+            <div id="panel-diagnostico" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('ordenes.diagnostico', $orden) }}">
+                    @csrf
+                    <h3>Iniciar diagnóstico</h3>
+                    <div class="rejilla">
+                        <div class="campo">
+                            <label for="diag-mecanico">Mecánico responsable</label>
+                            <select id="diag-mecanico" name="mecanico_responsable_id">
+                                <option value="">— Sin asignar —</option>
+                                @foreach ($mecanicos as $m)
+                                    <option value="{{ $m->id }}" @selected($orden->mecanico_responsable_id === $m->id)>{{ $m->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    <div class="campo">
+                        <label for="diag-notas">Diagnóstico inicial <span class="tenue">(opcional)</span></label>
+                        <textarea id="diag-notas" name="diagnostico" rows="3" placeholder="Describe lo que se observó al recibir el vehículo…">{{ old('diagnostico', $orden->diagnostico) }}</textarea>
+                    </div>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton">Iniciar diagnóstico</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
+        {{-- Panel: Autorización del cliente --}}
+        @if ($puedeAutorizar)
+            <div id="panel-autorizar" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('ordenes.estado', $orden) }}">
+                    @csrf
+                    <input type="hidden" name="estado" value="{{ \App\Enums\EstadoOrden::EnReparacion->value }}">
+                    <h3>Autorización del cliente</h3>
+                    <p class="ayuda" style="margin-bottom: .75rem;">El cliente aprobó el diagnóstico y el presupuesto. La orden pasa a reparación.</p>
+                    <div class="campo">
+                        <label for="comentario-autorizar">Comentario <span class="tenue">(opcional)</span></label>
+                        <input type="text" id="comentario-autorizar" name="comentario" placeholder="Ej. Cliente firmó la hoja de autorización">
+                    </div>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton exito">Confirmar autorización</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
+        {{-- Panel: Entregar vehículo --}}
+        @if ($puedeEntregar)
+            <div id="panel-entregar" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('ordenes.entrega', $orden) }}">
+                    @csrf
+                    <h3>Entregar vehículo al cliente</h3>
+                    <p class="ayuda" style="margin-bottom: .75rem;">Se abrirá el acta de entrega con el reporte de recepción, los trabajos realizados y las refacciones utilizadas. Al finalizar el cliente firmará su conformidad.</p>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton exito">Ir al acta de entrega</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
+        {{-- Panel: Trabajo terminado --}}
+        @if ($puedeTerminar)
+            <div id="panel-terminado" class="panel-accion" hidden>
+                <form method="POST" action="{{ route('ordenes.estado', $orden) }}">
+                    @csrf
+                    <input type="hidden" name="estado" value="{{ \App\Enums\EstadoOrden::Terminado->value }}">
+                    <h3>Marcar orden como terminada</h3>
+                    <p class="ayuda" style="margin-bottom: .75rem;">Todos los trabajos están completados. La orden pasa a «Terminado» y queda lista para entrega al cliente.</p>
+                    <div class="campo">
+                        <label for="comentario-terminado">Comentario <span class="tenue">(opcional)</span></label>
+                        <input type="text" id="comentario-terminado" name="comentario" placeholder="Ej. Vehículo listo para entrega">
+                    </div>
+                    <div class="fila" style="margin-top: .75rem;">
+                        <button class="boton exito">Confirmar</button>
+                        <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
         {{-- Panel: Cambiar estado --}}
         @if ($estadosDisponibles->isNotEmpty())
             <div id="panel-estado" class="panel-accion" hidden>
@@ -213,9 +343,9 @@
         @endif
     @endif
 
-    {{-- ── Trabajos realizados ────────────────────────────────────────────────── --}}
+    {{-- ── Trabajos a realizar ─────────────────────────────────────────────────── --}}
     <div class="tarjeta">
-        <h2>Trabajos realizados</h2>
+        <h2>Trabajos a realizar</h2>
         <div class="tabla-scroll">
             <table>
                 <thead><tr><th>Trabajo</th><th>Cobro</th><th>Mecánicos</th><th>Avance</th>@if ($verPrecios)<th class="derecha">Importe</th>@endif<th></th></tr></thead>
@@ -226,7 +356,7 @@
                         <td class="chico">{{ $t->tipo_cobro->label() }}@if ($t->tipo_cobro === \App\Enums\TipoCobro::PorHora) · {{ (float) $t->cantidad }} h @endif</td>
                         <td class="chico">{{ $t->mecanicos->map(fn ($m) => $m->name . ($m->pivot->horas ? " ({$m->pivot->horas} h)" : ''))->join(', ') ?: '—' }}</td>
                         <td>
-                            @if ($puedeTrabajar)
+                            @if ($puedeTrabajar && ! $avanceBloqueado)
                                 <form method="POST" action="{{ route('trabajos.update', $t) }}" class="fila">
                                     @csrf @method('PATCH')
                                     <select name="estado" style="width: auto;" onchange="this.form.submit()">
@@ -270,9 +400,9 @@
         </div>
     </div>
 
-    {{-- ── Refacciones utilizadas ─────────────────────────────────────────────── --}}
+    {{-- ── Refacciones a utilizar ──────────────────────────────────────────────── --}}
     <div class="tarjeta">
-        <h2>Refacciones utilizadas</h2>
+        <h2>Refacciones a utilizar</h2>
         <div class="tabla-scroll">
             <table>
                 <thead><tr><th>Pieza</th><th>Para el trabajo</th><th class="derecha">Cantidad</th>@if ($verPrecios)<th class="derecha">Precio</th><th class="derecha">Importe</th>@endif<th></th></tr></thead>
@@ -321,8 +451,10 @@
         </div>
     @endif
 
-    {{-- ── Datos generales ────────────────────────────────────────────────────── --}}
-    @include('ordenes._datos')
+    {{-- ── Datos generales: solo cuando ya inició el diagnóstico ─────────────── --}}
+    @if ($orden->estado !== \App\Enums\EstadoOrden::Recibido)
+        @include('ordenes._datos')
+    @endif
 
     {{-- ── Recepción y entrega ────────────────────────────────────────────────── --}}
     <div class="rejilla-2">
@@ -398,6 +530,12 @@
         transition: background .15s, border-color .15s;
     }
     .accion-btn:hover { background: #e8eaed; }
+    .accion-btn.accion-destacado { background: var(--primario); border-color: var(--primario); color: #fff; font-weight: 700; }
+    .accion-btn.accion-destacado:hover { background: var(--primario-oscuro); }
+    .accion-btn.accion-exito { background: var(--exito); border-color: var(--exito); }
+    .accion-btn.accion-exito:hover { background: #155c34; }
+    .accion-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .accion-btn:disabled:hover { background: #f4f5f7; filter: none; }
     .accion-btn.activo {
         background: var(--primario);
         border-color: var(--primario);

@@ -52,6 +52,7 @@ enum Rol: string
                 'recepcion.realizar',
                 'entrega.realizar',
                 'ordenes.ver_todas',
+                'ordenes.trabajar',
                 'precios.ver',
             ],
             self::Mecanico => [

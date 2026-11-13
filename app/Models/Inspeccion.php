@@ -208,7 +208,14 @@ class Inspeccion extends Model
         // La entrega no repite el checklist: el estado del vehículo quedó en la recepción y
         // solo se agregan observaciones finales, que son opcionales.
         if (! $this->esRecepcion()) {
-            return [];
+            $f = [];
+            if (blank($this->firmante_nombre)) {
+                $f[] = 'Captura el nombre de quien recibe el vehículo.';
+            }
+            if (! $this->adjuntos()->where('tipo', TipoAdjunto::Firma->value)->exists()) {
+                $f[] = 'Falta la firma de conformidad del cliente.';
+            }
+            return $f;
         }
 
         $f = [];

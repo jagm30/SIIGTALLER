@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EstadoOrden;
 use App\Enums\EstadoTrabajo;
 use App\Enums\Rol;
 use App\Enums\TipoCobro;
@@ -95,6 +96,10 @@ class TrabajoController extends Controller
     {
         $orden = $trabajo->orden;
         $this->validarOrdenEditable($request->user(), $orden);
+
+        if ($orden->estado === EstadoOrden::PorAutorizar) {
+            return back()->with('error', 'Los trabajos no pueden cambiar de estado mientras la orden espera autorización del cliente.');
+        }
 
         $datos = $request->validate([
             'estado' => ['required', Rule::enum(EstadoTrabajo::class)],

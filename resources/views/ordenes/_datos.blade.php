@@ -1,7 +1,12 @@
 {{-- Datos generales de la orden. Usa las variables de ordenes/show ($user, $editable, $verPrecios…). --}}
 <form method="POST" action="{{ route('ordenes.update', $orden) }}" class="tarjeta">
     @csrf @method('PATCH')
-    <h2>Datos de la orden</h2>
+    @if ($orden->estado === \App\Enums\EstadoOrden::PorAutorizar)
+        <h2>Datos del servicio a realizar</h2>
+        <p class="ayuda" style="margin-top: -.25rem; margin-bottom: .75rem;">Registra aquí los trabajos a ejecutar y la fecha promesa de entrega para armar el presupuesto del cliente.</p>
+    @else
+        <h2>Datos de la orden</h2>
+    @endif
     <div class="rejilla">
         @unless ($user->esMecanico())
             <div class="campo">

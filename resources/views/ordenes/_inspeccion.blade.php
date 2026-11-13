@@ -13,9 +13,15 @@
         <p><a href="{{ route('inspecciones.pdf', $inspeccion) }}" class="boton chico secundario" target="_blank">Exportar acta en PDF</a></p>
         @if ($inspeccion->fotos->isNotEmpty())
             <div class="fotos">
-                @foreach ($inspeccion->fotos->take(6) as $foto)
+                @foreach ($inspeccion->fotos as $foto)
                     <figure>
-                        <a href="{{ route('adjuntos.show', $foto) }}" target="_blank"><img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $foto->anguloFoto?->nombre }}" loading="lazy"></a>
+                        <a href="{{ route('adjuntos.show', $foto) }}"
+                           class="foto-lightbox"
+                           data-src="{{ route('adjuntos.show', $foto) }}"
+                           data-caption="{{ $foto->anguloFoto?->nombre ?? 'Foto' }}"
+                           data-grupo="inspeccion-{{ $inspeccion->id }}">
+                            <img src="{{ route('adjuntos.show', $foto) }}" alt="{{ $foto->anguloFoto?->nombre }}" loading="lazy">
+                        </a>
                         <figcaption>{{ $foto->anguloFoto?->nombre ?? 'Foto' }}</figcaption>
                     </figure>
                 @endforeach

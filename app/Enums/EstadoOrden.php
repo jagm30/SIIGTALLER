@@ -5,14 +5,13 @@ namespace App\Enums;
 /**
  * Ciclo de vida de una orden de servicio.
  *
- * recibido → diagnostico → en_reparacion ⇄ espera_refacciones → terminado → entregado
+ * recibido → diagnostico → espera_autorizacion → en_reparacion ⇄ espera_refacciones → terminado → entregado
  * Solo se cancela antes de empezar la reparación.
  */
 enum EstadoOrden: string
 {
     case Recibido = 'recibido';
     case Diagnostico = 'diagnostico';
-    // Ya no se usa: solo queda para poder leer la bitácora de órdenes viejas. Ver enUso().
     case PorAutorizar = 'por_autorizar';
     case EnReparacion = 'en_reparacion';
     case EsperaRefacciones = 'espera_refacciones';
@@ -23,14 +22,14 @@ enum EstadoOrden: string
     public function label(): string
     {
         return match ($this) {
-            self::Recibido => 'Recibido',
-            self::Diagnostico => 'Diagnóstico',
-            self::PorAutorizar => 'Por autorizar',
-            self::EnReparacion => 'En reparación',
+            self::Recibido          => 'Recibido',
+            self::Diagnostico       => 'Diagnóstico',
+            self::PorAutorizar      => 'En espera de autorización',
+            self::EnReparacion      => 'En reparación',
             self::EsperaRefacciones => 'Espera de refacciones',
-            self::Terminado => 'Terminado',
-            self::Entregado => 'Entregado',
-            self::Cancelado => 'Cancelado',
+            self::Terminado         => 'Terminado',
+            self::Entregado         => 'Entregado',
+            self::Cancelado         => 'Cancelado',
         };
     }
 
@@ -38,12 +37,12 @@ enum EstadoOrden: string
     public function siguientes(): array
     {
         return match ($this) {
-            self::Recibido => [self::Diagnostico, self::Cancelado],
-            self::Diagnostico => [self::EnReparacion, self::Cancelado],
-            self::PorAutorizar => [],
-            self::EnReparacion => [self::EsperaRefacciones, self::Terminado],
+            self::Recibido          => [self::Diagnostico, self::PorAutorizar, self::Cancelado],
+            self::Diagnostico       => [self::PorAutorizar, self::EnReparacion, self::Cancelado],
+            self::PorAutorizar      => [self::EnReparacion, self::Cancelado],
+            self::EnReparacion      => [self::EsperaRefacciones, self::Terminado],
             self::EsperaRefacciones => [self::EnReparacion],
-            self::Terminado => [self::Entregado],
+            self::Terminado         => [self::Entregado],
             self::Entregado, self::Cancelado => [],
         };
     }
@@ -67,18 +66,18 @@ enum EstadoOrden: string
     public function rolesQuePuedenEntrar(): array
     {
         return match ($this) {
-            self::Diagnostico, self::EsperaRefacciones, self::Terminado => [Rol::Administrador, Rol::Mecanico],
+            self::Diagnostico, self::PorAutorizar,
+            self::EsperaRefacciones, self::Terminado => [Rol::Administrador, Rol::Mecanico],
             // Recepción registra la autorización del cliente; el mecánico la retoma al llegar la pieza.
             self::EnReparacion => [Rol::Administrador, Rol::Recepcionista, Rol::Mecanico],
             self::Recibido, self::Entregado, self::Cancelado => [Rol::Administrador, Rol::Recepcionista],
-            self::PorAutorizar => [],
         };
     }
 
-    /** ¿Se puede elegir hoy? Falso para estados retirados que solo existen en la bitácora. */
+    /** ¿Se puede elegir hoy? */
     public function enUso(): bool
     {
-        return $this !== self::PorAutorizar;
+        return true;
     }
 
     /** @return list<self> estados que se muestran y se pueden elegir. */

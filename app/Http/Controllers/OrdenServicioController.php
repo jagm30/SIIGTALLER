@@ -181,6 +181,29 @@ class OrdenServicioController extends Controller
         return back()->with('ok', "La orden pasó a «{$nuevo->label()}».");
     }
 
+    /**
+     * Asigna mecánico, guarda las notas de diagnóstico y mueve la orden a «Diagnóstico».
+     * Solo Admin y Mecánico pueden ejecutar esta transición (lo valida el modelo).
+     */
+    public function iniciarDiagnostico(Request $request, OrdenServicio $orden): RedirectResponse
+    {
+        Gate::authorize('ver-orden', $orden);
+
+        $datos = $request->validate([
+            'mecanico_responsable_id' => ['nullable', Rule::exists('users', 'id')->where('rol', Rol::Mecanico->value)],
+            'diagnostico'             => ['nullable', 'string', 'max:5000'],
+        ], [], ['mecanico_responsable_id' => 'mecánico responsable']);
+
+        $orden->update([
+            'mecanico_responsable_id' => $datos['mecanico_responsable_id'] ?? $orden->mecanico_responsable_id,
+            'diagnostico'             => $datos['diagnostico'] ?? $orden->diagnostico,
+        ]);
+
+        $orden->cambiarEstado(EstadoOrden::PorAutorizar, $request->user());
+
+        return back()->with('ok', 'Diagnóstico registrado. La orden queda en espera de autorización del cliente.');
+    }
+
     /** Crea (o retoma) la entrega y manda a la pantalla donde se revisa con el cliente. */
     public function iniciarEntrega(Request $request, OrdenServicio $orden): RedirectResponse
     {

@@ -105,6 +105,27 @@
     .fotos figure.error-foto .estado-foto { color: var(--peligro); }
     .fotos img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block; }
     .fotos figcaption { font-size: .8rem; margin-top: .25rem; }
+    .fotos a.foto-lightbox { cursor: zoom-in; display: block; }
+
+    /* ── Lightbox ─────────────────────────────────────────────────────── */
+    #lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.88);
+        display: flex; align-items: center; justify-content: center; }
+    #lightbox[hidden] { display: none; }
+    #lb-img { max-width: calc(100vw - 120px); max-height: calc(100vh - 100px);
+        object-fit: contain; border-radius: 6px; display: block; user-select: none; }
+    #lb-cerrar { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,.15);
+        border: none; color: #fff; font-size: 1.5rem; line-height: 1; width: 2.2rem; height: 2.2rem;
+        border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    #lb-cerrar:hover { background: rgba(255,255,255,.3); }
+    .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.15);
+        border: none; color: #fff; font-size: 2rem; line-height: 1; width: 2.8rem; height: 2.8rem;
+        border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .lb-nav:hover { background: rgba(255,255,255,.3); }
+    #lb-prev { left: 1rem; }
+    #lb-next { right: 1rem; }
+    #lb-pie { position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
+        color: rgba(255,255,255,.85); font-size: .85rem; text-align: center;
+        background: rgba(0,0,0,.4); padding: .3rem .8rem; border-radius: 20px; white-space: nowrap; }
 
     input[type=file] { font: inherit; font-size: .85rem; max-width: 100%; }
     input[type=file]::file-selector-button { min-height: 40px; padding: .4rem .8rem; margin-right: .5rem; border: 1px solid var(--primario);

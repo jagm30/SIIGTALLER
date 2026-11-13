@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EstadoOrden;
 use App\Enums\GrupoChecklist;
 use App\Http\Controllers\Concerns\AutorizaInspeccion;
 use App\Http\Requests\InspeccionRequest;
@@ -74,13 +75,17 @@ class InspeccionController extends Controller
     {
         $this->autorizarCaptura($request->user(), $inspeccion);
 
-        // La entrega solo guarda las observaciones finales.
+        // La entrega guarda observaciones, nombre del firmante y firma del cliente.
         if (! $inspeccion->esRecepcion()) {
-            $inspeccion->update($request->safe()->only('observaciones'));
+            $inspeccion->update($request->safe()->only(['observaciones', 'firmante_nombre']));
+
+            if ($request->filled('firma')) {
+                $inspeccion->guardarFirma($request->input('firma'), $request->user());
+            }
 
             return $request->boolean('completar')
                 ? $this->completar($request, $inspeccion)
-                : back()->with('ok', 'Observaciones guardadas.');
+                : back()->with('ok', 'Entrega guardada.');
         }
 
         DB::transaction(function () use ($request, $inspeccion) {
@@ -127,46 +132,65 @@ class InspeccionController extends Controller
                 ->with('ok', 'Recepción completada. Imprime el QR y entrégalo al cliente.');
         }
 
+        $inspeccion->orden->cambiarEstado(EstadoOrden::Entregado, $request->user());
+
         return redirect()->route('ordenes.show', $inspeccion->orden_servicio_id)
-            ->with('ok', 'Entrega completada. Ya puedes marcar la orden como entregada.');
+            ->with('ok', 'Entrega completada. La orden ha sido marcada como entregada.');
     }
 
-    /** Acta en PDF tamaño carta: hoja 1 con datos y checklist; hoja 2 con fotos, daños y firma. */
+    /** Acta en PDF tamaño carta. Recepción: datos y checklist + fotos y firma. Entrega: trabajos y conformidad. */
     public function pdf(Inspeccion $inspeccion): Response|RedirectResponse
     {
         Gate::authorize('ver-orden', $inspeccion->orden);
-        abort_unless($inspeccion->esRecepcion(), 404); // la entrega ya no lleva acta propia
 
         if (! $inspeccion->estaCompletada()) {
             return back()->with('error', 'El PDF se genera cuando la inspección está completada.');
         }
 
-        $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente', 'orden.sucursal',
-            'respuestas.checklistItem', 'danios.zona', 'danios.fotos', 'fotos.anguloFoto', 'firma', 'realizadaPor']);
-
         $nombre = ($inspeccion->esRecepcion() ? 'recepcion-' : 'entrega-') . $inspeccion->orden->folio . '.pdf';
 
-        return Pdf::loadView('inspecciones.pdf', [
+        if ($inspeccion->esRecepcion()) {
+            $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente', 'orden.sucursal',
+                'respuestas.checklistItem', 'danios.zona', 'danios.fotos', 'fotos.anguloFoto', 'firma', 'realizadaPor']);
+
+            return Pdf::loadView('inspecciones.pdf', [
+                'inspeccion' => $inspeccion,
+                'orden' => $inspeccion->orden,
+                'checklist' => $inspeccion->checklistPorGrupo(),
+                'terminos' => PreferenciaOperacion::valor('recepcion_terminos', $inspeccion->orden->sucursal_id),
+            ])->setPaper('letter')->stream($nombre);
+        }
+
+        // Acta de entrega
+        $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente', 'orden.sucursal',
+            'orden.trabajos.mecanicos', 'orden.refacciones.trabajo', 'firma', 'realizadaPor']);
+
+        return Pdf::loadView('inspecciones.pdf_entrega', [
             'inspeccion' => $inspeccion,
-            'orden' => $inspeccion->orden,
-            'checklist' => $inspeccion->checklistPorGrupo(),
-            'terminos' => PreferenciaOperacion::valor('recepcion_terminos', $inspeccion->orden->sucursal_id),
+            'orden'      => $inspeccion->orden,
         ])->setPaper('letter')->stream($nombre);
     }
 
     // ── Apoyo ────────────────────────────────────────────────────
 
-    /** Pantalla de entrega: el reporte de la recepción (solo lectura) y las observaciones finales. */
+    /** Pantalla de entrega: reporte de recepción, trabajos, refacciones y conformidad del cliente. */
     private function entrega(Inspeccion $entrega): View
     {
-        $entrega->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente',
+        $entrega->load([
+            'orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente',
             'orden.recepcion.respuestas.checklistItem', 'orden.recepcion.fotos.anguloFoto',
-            'orden.recepcion.danios.zona', 'orden.recepcion.realizadaPor']);
+            'orden.recepcion.danios.zona', 'orden.recepcion.realizadaPor',
+            'orden.trabajos.mecanicos',
+            'orden.refacciones.trabajo',
+            'firma',
+        ]);
 
         return view('inspecciones.entrega', [
-            'entrega' => $entrega,
-            'orden' => $entrega->orden,
-            'recepcion' => $entrega->orden->recepcion,
+            'entrega'    => $entrega,
+            'orden'      => $entrega->orden,
+            'recepcion'  => $entrega->orden->recepcion,
+            'trabajos'   => $entrega->orden->trabajos,
+            'refacciones' => $entrega->orden->refacciones,
         ]);
     }
 

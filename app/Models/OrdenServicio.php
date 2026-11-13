@@ -277,6 +277,11 @@ class OrdenServicio extends Model
             $errores[] = 'Falta completar la entrega (observaciones finales).';
         }
 
+        if ($actual === EstadoOrden::PorAutorizar && $nuevo === EstadoOrden::EnReparacion
+            && $this->trabajos()->count() === 0 && $this->refacciones()->count() === 0) {
+            $errores[] = 'Registra al menos un trabajo o una refacción antes de autorizar la reparación.';
+        }
+
         if ($nuevo === EstadoOrden::Cancelado && blank($comentario ?? $this->motivo_cancelacion)) {
             $errores[] = 'Indica el motivo de cancelación.';
         }

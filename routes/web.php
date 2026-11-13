@@ -54,6 +54,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/ordenes/{orden}', [OrdenServicioController::class, 'update'])->name('ordenes.update');
     Route::post('/ordenes/{orden}/estado', [OrdenServicioController::class, 'cambiarEstado'])->name('ordenes.estado');
     Route::get('/ordenes/{orden}/qr', [QrController::class, 'imprimir'])->name('ordenes.qr');
+    Route::post('/ordenes/{orden}/diagnostico', [OrdenServicioController::class, 'iniciarDiagnostico'])->name('ordenes.diagnostico');
     Route::post('/ordenes/{orden}/entrega', [OrdenServicioController::class, 'iniciarEntrega'])->middleware('can:entrega.realizar')->name('ordenes.entrega');
 
     // Trabajos y refacciones de la orden (mecánico y administrador)
