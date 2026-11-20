@@ -65,7 +65,7 @@ class AutenticacionTest extends TestCase
     public function test_el_tablero_carga_para_cada_rol(): void
     {
         foreach (Rol::cases() as $rol) {
-            $this->actingAs($this->usuario($rol))->get('/')->assertOk()->assertSee('Vehículos en el taller');
+            $this->actingAs($this->usuario($rol))->get('/')->assertOk()->assertSee('Órdenes activas');
         }
     }
 }

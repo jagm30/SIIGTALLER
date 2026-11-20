@@ -75,12 +75,16 @@ class InspeccionController extends Controller
     {
         $this->autorizarCaptura($request->user(), $inspeccion);
 
-        // La entrega guarda observaciones, nombre del firmante y firma del cliente.
+        // La entrega guarda observaciones, nombre del firmante y firmas.
         if (! $inspeccion->esRecepcion()) {
             $inspeccion->update($request->safe()->only(['observaciones', 'firmante_nombre']));
 
             if ($request->filled('firma')) {
                 $inspeccion->guardarFirma($request->input('firma'), $request->user());
+            }
+
+            if ($request->filled('firma_taller')) {
+                $inspeccion->guardarFirmaTaller($request->input('firma_taller'), $request->user());
             }
 
             return $request->boolean('completar')
@@ -94,6 +98,8 @@ class InspeccionController extends Controller
                 'sin_placas' => $request->boolean('sin_placas'),
                 'persona_es_cliente' => $request->boolean('persona_es_cliente'),
                 'acepta_terminos' => $request->boolean('acepta_terminos'),
+                // Quien entrega el vehículo es quien firma: se sincroniza automáticamente.
+                'firmante_nombre' => $request->input('persona_nombre') ?: $inspeccion->persona_nombre,
             ]);
 
             $this->guardarRespuestas($inspeccion, $request->input('respuestas', []));
@@ -163,7 +169,7 @@ class InspeccionController extends Controller
 
         // Acta de entrega
         $inspeccion->load(['orden.vehiculo.marca', 'orden.vehiculo.modelo', 'orden.cliente', 'orden.sucursal',
-            'orden.trabajos.mecanicos', 'orden.refacciones.trabajo', 'firma', 'realizadaPor']);
+            'orden.trabajos.mecanicos', 'orden.refacciones.trabajo', 'firma', 'firmaTaller', 'realizadaPor']);
 
         return Pdf::loadView('inspecciones.pdf_entrega', [
             'inspeccion' => $inspeccion,
@@ -182,7 +188,7 @@ class InspeccionController extends Controller
             'orden.recepcion.danios.zona', 'orden.recepcion.realizadaPor',
             'orden.trabajos.mecanicos',
             'orden.refacciones.trabajo',
-            'firma',
+            'firma', 'firmaTaller',
         ]);
 
         return view('inspecciones.entrega', [

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('titulo', 'Taller') · {{ config('app.name') }}</title>
     @include('layouts.estilos')
+    @stack('styles')
 </head>
 <body>
 @unless($publico ?? false)

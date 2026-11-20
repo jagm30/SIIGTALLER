@@ -29,7 +29,7 @@ class QrPublicoTest extends TestCase
         $orden->trabajos()->create(['servicio_id' => $this->servicio()->id]);
         $orden->cambiarEstado(EstadoOrden::Terminado, $mecanico);
         $entrega = $orden->iniciarEntrega($recepcion);
-        $entrega->completar();
+        $this->completarEntrega($entrega);
         $orden->cambiarEstado(EstadoOrden::Entregado, $recepcion);
         $vehiculo = $orden->vehiculo;
 
@@ -96,12 +96,12 @@ class QrPublicoTest extends TestCase
         $orden->refacciones()->create(['descripcion' => 'Empaque de cárter', 'cantidad' => 1]);
         $orden->cambiarEstado(EstadoOrden::Terminado, $mecanico);
         $entrega = $orden->iniciarEntrega($recepcion);
-        $entrega->completar();
+        $this->completarEntrega($entrega);
         $orden->cambiarEstado(EstadoOrden::Entregado, $recepcion);
 
         $this->get(route('qr.show', $orden->vehiculo->qr_token))
             ->assertDontSee('Servicio en curso')
-            ->assertSeeInOrder(['Servicios realizados', 'Fuga en el empaque del cárter.', 'Piezas utilizadas', 'Empaque de cárter']);
+            ->assertSeeInOrder(['Historial de servicios', 'Fuga en el empaque del cárter.', 'Piezas utilizadas', 'Empaque de cárter']);
     }
 
     public function test_al_completar_la_recepcion_se_abre_la_hoja_para_imprimir_el_qr(): void
@@ -122,7 +122,7 @@ class QrPublicoTest extends TestCase
             ->assertSee(route('qr.show', $orden->vehiculo->qr_token))
             ->assertSee($orden->folio)
             // Desde aquí también se abre el acta de la recepción en PDF
-            ->assertSee('Acta de recepción en PDF')
+            ->assertSee('Acta PDF')
             ->assertSee(route('inspecciones.pdf', $orden->recepcion))
             // La hoja se le entrega al cliente: sin sus datos personales
             ->assertDontSee($orden->cliente->telefono);
@@ -148,7 +148,7 @@ class QrPublicoTest extends TestCase
         $url = route('qr.show', $orden->vehiculo->qr_token);
 
         $this->actingAs($recepcion)->get(route('ordenes.qr', $orden))
-            ->assertSee('<a href="' . $url . '#historial" target="_blank" class="enlace-qr">', false);
+            ->assertSee('<a href="' . $url . '#historial" class="qr-ticket-url" target="_blank">', false);
 
         $this->get($url)->assertSee('id="historial"', false);
     }

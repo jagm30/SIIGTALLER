@@ -162,18 +162,30 @@
             </div>
         </div>
 
-        @if ($entrega->firma)
-            <p><img src="{{ route('adjuntos.show', $entrega->firma) }}" alt="Firma" style="max-width: 280px; border: 1px solid var(--borde); border-radius: 6px;"><br>
-                <span class="tenue chico">Firma guardada. Si vuelven a firmar, se reemplaza.</span></p>
-        @endif
-
-        <div class="campo">
-            <label>Firma de conformidad</label>
-            <canvas id="lienzo-firma" class="firma"></canvas>
-            <input type="hidden" name="firma" id="firma">
-            <div class="fila" style="margin-top: .35rem;">
-                <button type="button" class="boton-link chico" id="limpiar-firma">Borrar</button>
-                <span class="ayuda" style="margin: 0;">Firma con el dedo o el mouse. Se guarda con los botones de abajo.</span>
+        <div class="rejilla">
+            <div class="campo">
+                <label>Firma de conformidad del cliente</label>
+                @if ($entrega->firma)
+                    <p style="margin: 0 0 .35rem;"><img src="{{ route('adjuntos.show', $entrega->firma) }}" alt="Firma del cliente" style="max-width: 240px; border: 1px solid var(--borde); border-radius: 6px;"><br>
+                        <span class="tenue chico">Guardada. Si vuelven a firmar, se reemplaza.</span></p>
+                @endif
+                <canvas id="lienzo-firma" class="firma"></canvas>
+                <input type="hidden" name="firma" id="firma">
+                <div class="fila" style="margin-top: .35rem;">
+                    <button type="button" class="boton-link chico" id="limpiar-firma">Borrar</button>
+                </div>
+            </div>
+            <div class="campo">
+                <label>Firma del encargado del taller</label>
+                @if ($entrega->firmaTaller)
+                    <p style="margin: 0 0 .35rem;"><img src="{{ route('adjuntos.show', $entrega->firmaTaller) }}" alt="Firma del taller" style="max-width: 240px; border: 1px solid var(--borde); border-radius: 6px;"><br>
+                        <span class="tenue chico">Guardada. Si vuelven a firmar, se reemplaza.</span></p>
+                @endif
+                <canvas id="lienzo-firma-taller" class="firma"></canvas>
+                <input type="hidden" name="firma_taller" id="firma-taller">
+                <div class="fila" style="margin-top: .35rem;">
+                    <button type="button" class="boton-link chico" id="limpiar-firma-taller">Borrar</button>
+                </div>
             </div>
         </div>
 
@@ -186,11 +198,11 @@
 
 @push('scripts')
 <script>
-    // Firma con el dedo o el mouse (misma lógica que la recepción).
-    (function () {
-        const lienzo = document.getElementById('lienzo-firma');
+    // Inicializa un canvas de firma: dibuja con el dedo o el mouse y guarda el PNG en un campo oculto.
+    function iniciarFirma(idLienzo, idCampo, idLimpiar) {
+        const lienzo = document.getElementById(idLienzo);
         const ctx    = lienzo.getContext('2d');
-        const campo  = document.getElementById('firma');
+        const campo  = document.getElementById(idCampo);
         let dibujando = false;
         let trazando  = false;
 
@@ -229,13 +241,16 @@
             trazando = false;
         }));
 
-        document.getElementById('limpiar-firma').addEventListener('click', () => {
+        document.getElementById(idLimpiar).addEventListener('click', () => {
             ctx.clearRect(0, 0, lienzo.width, lienzo.height);
             campo.value = '';
         });
 
         ajustarTamano();
         window.addEventListener('resize', ajustarTamano);
-    })();
+    }
+
+    iniciarFirma('lienzo-firma',        'firma',        'limpiar-firma');
+    iniciarFirma('lienzo-firma-taller', 'firma-taller', 'limpiar-firma-taller');
 </script>
 @endpush

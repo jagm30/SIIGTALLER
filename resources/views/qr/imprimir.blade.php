@@ -108,7 +108,7 @@
         <p>Orden {{ $orden->folio }} · {{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }}</p>
     </div>
     <div class="qr-imprimir-acciones">
-        <button type="button" class="boton" onclick="window.print()">Imprimir</button>
+        <button type="button" class="boton" onclick="window.print()">Imprimir QR</button>
         @if ($orden->recepcion?->estaCompletada())
             <a href="{{ route('inspecciones.pdf', $orden->recepcion) }}" class="boton secundario" target="_blank">Acta PDF</a>
         @endif

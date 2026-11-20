@@ -16,7 +16,7 @@
     h3 { font-size: 1rem; margin: 1rem 0 .5rem; }
 
     .barra { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; padding: .6rem 1rem; background: #1f2933; color: #fff; }
-    .barra a { color: #d6dde6; text-decoration: none; padding: .35rem .6rem; border-radius: 6px; }
+    .barra a { color: #d6dde6; text-decoration: none; padding: .35rem .6rem; border-radius: 6px; transition: background .15s; }
     .barra a.activo, .barra a:hover { background: #34414f; color: #fff; }
     .barra .marca { font-weight: 700; color: #fff; }
     .barra nav { display: flex; flex-wrap: wrap; gap: .25rem; flex: 1; }
@@ -25,7 +25,7 @@
 
     .contenido { max-width: 1180px; margin: 0 auto; padding: 1rem; }
     .encabezado { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: .75rem; margin-bottom: 1rem; }
-    .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); padding: 1rem; margin-bottom: 1rem; }
+    .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
     .rejilla { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     .rejilla-2 { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
     .tenue { color: var(--tenue); }
@@ -54,8 +54,10 @@
     .error-campo { font-size: .85rem; color: var(--peligro); margin-top: .2rem; }
 
     .boton { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; padding: .55rem 1.1rem;
-        border: 1px solid var(--primario); border-radius: 6px; background: var(--primario); color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+        border: 1px solid var(--primario); border-radius: 6px; background: var(--primario); color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+        transition: background .15s, transform .1s; }
     .boton:hover { background: var(--primario-oscuro); }
+    .boton:active { transform: scale(.97); }
     .boton.secundario { background: #fff; color: var(--primario); }
     .boton.peligro { background: var(--peligro); border-color: var(--peligro); }
     .boton.exito { background: var(--exito); border-color: var(--exito); }
@@ -64,7 +66,11 @@
 
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--borde); vertical-align: top; }
-    th { font-size: .8rem; text-transform: uppercase; letter-spacing: .02em; color: var(--tenue); }
+    th { font-size: .8rem; text-transform: uppercase; letter-spacing: .02em; color: var(--tenue); background: #f7f8fa; border-bottom: 2px solid var(--borde); }
+    tbody tr { transition: background .12s; }
+    tbody tr:hover td { background: #f5f8fd; }
+    /* El checklist usa su propia lógica visual; anula el hover global */
+    .matriz tr:hover td, .matriz tr:hover th { background: transparent; }
     .tabla-scroll { overflow-x: auto; }
 
     .etiqueta { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .8rem; font-weight: 600; background: #e8ecf1; color: #34414f; white-space: nowrap; }
@@ -94,7 +100,7 @@
     .reporte-checklist td { padding: .2rem .4rem; border-bottom: 1px solid var(--borde); }
     .reporte-checklist .valor { text-align: right; font-weight: 600; white-space: nowrap; }
     .reporte-checklist .malo { color: var(--peligro); }
-    .fotos { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .fotos { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
     .fotos figure { margin: 0; background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .4rem; transition: border-color .2s, background .2s; }
     .fotos figure.con-preview { border-color: var(--exito); background: #edf7f1; }
     .fotos figure.con-preview figcaption strong::after { content: ' ✓'; color: var(--exito); }
@@ -129,7 +135,10 @@
 
     input[type=file] { font: inherit; font-size: .85rem; max-width: 100%; }
     input[type=file]::file-selector-button { min-height: 40px; padding: .4rem .8rem; margin-right: .5rem; border: 1px solid var(--primario);
-        border-radius: 6px; background: #fff; color: var(--primario); font-weight: 600; cursor: pointer; }
+        border-radius: 6px; background: #fff; color: var(--primario); font-weight: 600; cursor: pointer; white-space: nowrap; }
+    /* Dentro de la cuadrícula de fotos, el nombre de archivo es ruido visual (hay preview y estado). */
+    .fotos input[type=file] { color: transparent; width: 100%; }
+    .fotos input[type=file]::file-selector-button { color: var(--primario); }
     .firma { width: 100%; max-width: 560px; height: 200px; border: 2px dashed var(--borde); border-radius: 6px; background: #fff; touch-action: none; }
     .paginacion { margin-top: 1rem; }
     .paginacion .pagination { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0; }
@@ -137,8 +146,27 @@
     .paginacion .pagination .active span { background: var(--primario); border-color: var(--primario); color: #fff; }
     .paginacion .pagination .disabled span { color: var(--tenue); }
 
+    /* h2 directo dentro de .tarjeta: separador visual entre título y contenido */
+    .tarjeta > h2, form.tarjeta > h2 {
+        padding-bottom: .55rem;
+        border-bottom: 1px solid var(--borde);
+        margin-bottom: .9rem;
+    }
+
+    /* Tarjeta de totales (alineada a la derecha en escritorio) */
+    .tarjeta-totales { max-width: 360px; margin-left: auto; }
+
     @media (max-width: 640px) {
         th.ocultar-movil, td.ocultar-movil { display: none; }
+    }
+    @media (max-width: 540px) {
+        .contenido { padding: .75rem .6rem; }
+        .tarjeta { padding: .85rem; }
+        h1 { font-size: 1.3rem; }
+        .tarjeta-totales { max-width: 100%; margin-left: 0; }
+        /* Encabezado de página: apila título y botón en columna */
+        .encabezado { flex-direction: column; align-items: stretch; }
+        .encabezado .boton { text-align: center; }
     }
     /* Checklist compacto (recepción y entrega): grupos en columnas, opciones como celdas para tocar */
     .progreso { font-size: .85rem; color: var(--tenue); white-space: nowrap; }

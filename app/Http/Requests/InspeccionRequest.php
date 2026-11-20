@@ -39,6 +39,7 @@ class InspeccionRequest extends FormRequest
             'fotos' => ['nullable', 'array'],
             'fotos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'], // 10 MB
             'firma' => ['nullable', 'string', 'starts_with:data:image/png;base64,', 'max:700000'],
+            'firma_taller' => ['nullable', 'string', 'starts_with:data:image/png;base64,', 'max:700000'],
         ];
     }
 

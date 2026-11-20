@@ -80,7 +80,7 @@ class RecordatoriosTest extends TestCase
         $orden = $this->ordenEnReparacion($recepcion, $mecanico);
         $orden->trabajos()->create(['servicio_id' => $servicio->id]);
         $orden->cambiarEstado(EstadoOrden::Terminado, $mecanico);
-        $orden->iniciarEntrega($recepcion)->completar();
+        $this->completarEntrega($orden->iniciarEntrega($recepcion));
         $orden->cambiarEstado(EstadoOrden::Entregado, $recepcion);
 
         return $orden->refresh();

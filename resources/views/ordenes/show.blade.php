@@ -28,20 +28,295 @@
     $todosTerminados = $orden->trabajos->isNotEmpty()
         && $orden->trabajos->every(fn ($t) => $t->estado === \App\Enums\EstadoTrabajo::Terminado);
     $dinero = fn ($v) => $v === null ? '—' : '$' . number_format((float) $v, 2);
+
+    // Color del acento según estado
+    $acentoColor = match($orden->estado->value) {
+        'recibido'           => ['#607d8b', '#90a4ae'],
+        'diagnostico'        => ['#a86b00', '#d4a017'],
+        'por_autorizar'      => ['#c27a00', '#e8a800'],
+        'en_reparacion'      => ['#1f5fbf', '#5b9cf6'],
+        'espera_refacciones' => ['#c05621', '#ed8936'],
+        'terminado'          => ['#1e7a46', '#38a169'],
+        'entregado'          => ['#1e7a46', '#38a169'],
+        'cancelado'          => ['#b3261e', '#e57373'],
+        default              => ['#1f5fbf', '#5b9cf6'],
+    };
 @endphp
 
+@push('styles')
+<style>
+    /* ── Hero de la orden ───────────────────────────────────────────────── */
+    .or-hero {
+        background: var(--tarjeta);
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        margin-bottom: 1rem;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .or-hero-acento { height: 4px; }
+    .or-hero-cuerpo {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.1rem;
+        padding: 1.2rem 1.2rem .8rem;
+        flex-wrap: wrap;
+    }
+    .or-icono-bloque {
+        flex-shrink: 0;
+        width: 54px;
+        height: 54px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.6rem;
+        line-height: 1;
+        user-select: none;
+    }
+    .or-hero-info { flex: 1; min-width: 0; }
+    .or-folio-titulo {
+        font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 .3rem;
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+    .or-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem .9rem;
+        margin-top: .35rem;
+    }
+    .or-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .875rem;
+        color: var(--tenue);
+    }
+    .or-chip a { color: var(--primario); text-decoration: none; }
+    .or-chip a:hover { text-decoration: underline; }
+    .or-hero-acciones {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        padding: 0 1.2rem .9rem;
+        justify-content: flex-end;
+    }
+
+    /* Stats strip */
+    .or-stats {
+        display: flex;
+        border-top: 1px solid var(--borde);
+        background: #fafbfc;
+    }
+    .or-stat { flex: 1; padding: .6rem 1.1rem; }
+    .or-stat + .or-stat { border-left: 1px solid var(--borde); }
+    .or-stat-label {
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--tenue);
+        margin-bottom: .1rem;
+    }
+    .or-stat-val { font-size: .93rem; font-weight: 600; }
+    .or-stat-val.atrasado { color: var(--peligro); }
+
+    /* ── Barra de acciones ──────────────────────────────────────────────── */
+    .acciones-orden {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        background: #fff;
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        padding: .6rem .75rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .accion-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        min-height: 44px;
+        padding: .5rem 1.1rem;
+        background: #f4f5f7;
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        font: inherit;
+        font-size: 1rem;
+        cursor: pointer;
+        color: var(--texto);
+        text-decoration: none;
+        transition: background .15s, border-color .15s;
+    }
+    .accion-btn:hover { background: #e8eaed; }
+    .accion-btn.accion-destacado {
+        background: var(--primario);
+        border-color: var(--primario);
+        color: #fff;
+        font-weight: 700;
+    }
+    .accion-btn.accion-destacado:hover { background: var(--primario-oscuro); }
+    .accion-btn.accion-exito { background: var(--exito); border-color: var(--exito); }
+    .accion-btn.accion-exito:hover { background: #155c34; }
+    .accion-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .accion-btn:disabled:hover { background: #f4f5f7; }
+    .accion-btn.activo { background: var(--primario); border-color: var(--primario); color: #fff; }
+    .accion-icono { font-style: normal; font-size: 1.1em; }
+
+    /* ── Paneles de acción ──────────────────────────────────────────────── */
+    .panel-accion {
+        background: #fff;
+        border: 2px solid var(--primario);
+        border-radius: var(--radio);
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .panel-accion h3 { margin: 0 0 1rem; font-size: 1.1rem; }
+
+    /* ── Bitácora timeline ──────────────────────────────────────────────── */
+    .or-bitacora { padding: .25rem 0; }
+    .or-evento {
+        display: flex;
+        gap: .9rem;
+        position: relative;
+    }
+    .or-evento + .or-evento { margin-top: .1rem; }
+    .or-evento-linea {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+        width: 20px;
+    }
+    .or-evento-punto {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--borde);
+        border: 2px solid var(--tarjeta);
+        outline: 2px solid var(--borde);
+        margin-top: .35rem;
+        flex-shrink: 0;
+        z-index: 1;
+    }
+    .or-evento:first-child .or-evento-punto { background: var(--primario); outline-color: var(--primario); }
+    .or-evento-linea::after {
+        content: '';
+        flex: 1;
+        width: 2px;
+        background: var(--borde);
+        margin-top: 3px;
+        min-height: 18px;
+    }
+    .or-evento:last-child .or-evento-linea::after { display: none; }
+    .or-evento-cuerpo {
+        padding: .2rem 0 .85rem;
+        min-width: 0;
+        flex: 1;
+    }
+    .or-evento-cabeza {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: .2rem .5rem;
+        margin-bottom: .1rem;
+    }
+    .or-evento-fecha {
+        font-size: .8rem;
+        color: var(--tenue);
+        white-space: nowrap;
+        font-family: ui-monospace, Consolas, monospace;
+    }
+    .or-evento-transicion {
+        font-size: .88rem;
+        font-weight: 600;
+    }
+    .or-evento-usuario {
+        font-size: .82rem;
+        color: var(--tenue);
+    }
+    .or-evento-comentario {
+        font-size: .85rem;
+        color: var(--tenue);
+        display: block;
+        margin-top: .1rem;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+        .or-folio-titulo { font-size: 1.25rem; }
+        .or-icono-bloque { width: 44px; height: 44px; font-size: 1.3rem; border-radius: 9px; }
+        .or-hero-acciones { justify-content: flex-start; padding-top: 0; }
+    }
+    @media (max-width: 480px) {
+        .or-stats { flex-direction: column; }
+        .or-stat + .or-stat { border-left: 0; border-top: 1px solid var(--borde); }
+        .or-hero-cuerpo { gap: .75rem; }
+    }
+</style>
+@endpush
+
 @section('contenido')
-    {{-- Encabezado --}}
-    <div class="encabezado">
-        <div>
-            <h1>Orden {{ $orden->folio }} <span class="etiqueta {{ $orden->estado->value }}">{{ $orden->estado->label() }}</span></h1>
-            <p class="tenue">
-                {{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }} {{ $orden->vehiculo->anio }}
-                · {{ $orden->vehiculo->placas ?? 'Sin placas' }}
-                · {{ $orden->cliente->nombre_completo }} · {{ $orden->cliente->telefono }}
-            </p>
+
+    {{-- ── Hero ─────────────────────────────────────────────────────────────── --}}
+    <div class="or-hero">
+        <div class="or-hero-acento" style="background: linear-gradient(90deg, {{ $acentoColor[0] }} 0%, {{ $acentoColor[1] }} 100%);"></div>
+
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start;">
+            <div class="or-hero-cuerpo" style="flex:1; min-width:0;">
+                <div class="or-icono-bloque" style="background: linear-gradient(135deg, {{ $acentoColor[0] }} 0%, {{ $acentoColor[1] }} 100%);">🔧</div>
+                <div class="or-hero-info">
+                    <div class="or-folio-titulo">
+                        {{ $orden->folio }}
+                        <span class="etiqueta {{ $orden->estado->value }}">{{ $orden->estado->label() }}</span>
+                    </div>
+                    <div class="or-chips">
+                        <span class="or-chip">🚗 <a href="{{ route('vehiculos.show', $orden->vehiculo) }}">{{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }} {{ $orden->vehiculo->anio }}</a>
+                            @if ($orden->vehiculo->placas)<span class="tenue">· {{ $orden->vehiculo->placas }}</span>@endif
+                        </span>
+                        <span class="or-chip">👤 <a href="{{ route('clientes.show', $orden->cliente) }}">{{ $orden->cliente->nombre_completo }}</a>
+                            <span class="tenue">· {{ $orden->cliente->telefono }}</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="or-hero-acciones">
+                <a href="{{ route('vehiculos.show', $orden->vehiculo) }}" class="boton secundario">Historial del vehículo</a>
+            </div>
         </div>
-        <a href="{{ route('vehiculos.show', $orden->vehiculo) }}" class="boton secundario">Historial del vehículo</a>
+
+        <div class="or-stats">
+            <div class="or-stat">
+                <div class="or-stat-label">Ingreso</div>
+                <div class="or-stat-val">{{ $orden->fecha_ingreso->format('d/m/Y') }}</div>
+            </div>
+            <div class="or-stat">
+                <div class="or-stat-label">Fecha promesa</div>
+                @if ($orden->fecha_promesa)
+                    <div class="or-stat-val {{ $orden->fecha_promesa->isPast() && $editable ? 'atrasado' : '' }}">
+                        {{ $orden->fecha_promesa->format('d/m/Y') }}
+                        @if ($orden->fecha_promesa->isPast() && $editable) · atrasada @endif
+                    </div>
+                @else
+                    <div class="or-stat-val tenue">Sin definir</div>
+                @endif
+            </div>
+            <div class="or-stat">
+                <div class="or-stat-label">Mecánico</div>
+                <div class="or-stat-val">{{ $orden->mecanico_responsable_id ? $orden->mecanicoResponsable->name : '—' }}</div>
+            </div>
+            <div class="or-stat">
+                <div class="or-stat-label">Recibió</div>
+                <div class="or-stat-val">{{ $orden->recibidoPor->name }}</div>
+            </div>
+        </div>
     </div>
 
     {{-- ── Barra de acciones ──────────────────────────────────────────────────── --}}
@@ -252,7 +527,7 @@
                         <textarea id="diag-notas" name="diagnostico" rows="3" placeholder="Describe lo que se observó al recibir el vehículo…">{{ old('diagnostico', $orden->diagnostico) }}</textarea>
                     </div>
                     <div class="fila" style="margin-top: .75rem;">
-                        <button class="boton">Iniciar diagnóstico</button>
+                        <button class="boton">Guardar diagnóstico</button>
                         <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
                     </div>
                 </form>
@@ -442,7 +717,7 @@
 
     {{-- ── Totales ────────────────────────────────────────────────────────────── --}}
     @if ($verPrecios)
-        <div class="tarjeta" style="max-width: 360px; margin-left: auto;">
+        <div class="tarjeta tarjeta-totales">
             <table>
                 <tr><td>Subtotal</td><td class="derecha">{{ $dinero($orden->subtotal) }}</td></tr>
                 <tr><td>Descuento @if ($orden->descuento_porcentaje !== null)<span class="tenue chico">({{ (float) $orden->descuento_porcentaje }} %)</span>@endif</td><td class="derecha">{{ $dinero($orden->descuento) }}</td></tr>
@@ -488,69 +763,39 @@
         </div>
     </div>
 
-    {{-- ── Bitácora ────────────────────────────────────────────────────────────── --}}
+    {{-- ── Bitácora timeline ───────────────────────────────────────────────────── --}}
     <div class="tarjeta">
         <h2>Historial de la orden</h2>
-        @foreach ($orden->bitacoraEstados as $b)
-            <p class="chico" style="margin: .25rem 0;">
-                <strong>{{ $b->created_at->format('d/m/Y H:i') }}</strong> ·
-                {{ $b->estado_anterior?->label() ? $b->estado_anterior->label() . ' → ' : '' }}{{ $b->estado_nuevo->label() }}
-                · {{ $b->usuario->name }}
-                @if ($b->comentario) · <em>{{ $b->comentario }}</em> @endif
-            </p>
-        @endforeach
+        <div class="or-bitacora">
+            @foreach ($orden->bitacoraEstados as $b)
+                <div class="or-evento">
+                    <div class="or-evento-linea">
+                        <div class="or-evento-punto"></div>
+                    </div>
+                    <div class="or-evento-cuerpo">
+                        <div class="or-evento-cabeza">
+                            <span class="or-evento-fecha">{{ $b->created_at->format('d/m/Y H:i') }}</span>
+                            <span class="or-evento-transicion">
+                                @if ($b->estado_anterior)
+                                    <span class="etiqueta {{ $b->estado_anterior->value }}" style="font-size:.75rem;">{{ $b->estado_anterior->label() }}</span>
+                                    →
+                                @endif
+                                <span class="etiqueta {{ $b->estado_nuevo->value }}" style="font-size:.75rem;">{{ $b->estado_nuevo->label() }}</span>
+                            </span>
+                            <span class="or-evento-usuario">{{ $b->usuario->name }}</span>
+                        </div>
+                        @if ($b->comentario)
+                            <em class="or-evento-comentario">{{ $b->comentario }}</em>
+                        @endif
+                    </div>
+                </div>
+            @endforeach
+        </div>
     </div>
+
 @endsection
 
 @push('scripts')
-<style>
-    .acciones-orden {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .5rem;
-        background: #fff;
-        border: 1px solid var(--borde);
-        border-radius: var(--radio);
-        padding: .6rem .75rem;
-        margin-bottom: 1rem;
-    }
-    .accion-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        min-height: 44px;
-        padding: .5rem 1.1rem;
-        background: #f4f5f7;
-        border: 1px solid var(--borde);
-        border-radius: var(--radio);
-        font: inherit;
-        font-size: 1rem;
-        cursor: pointer;
-        color: var(--texto);
-        transition: background .15s, border-color .15s;
-    }
-    .accion-btn:hover { background: #e8eaed; }
-    .accion-btn.accion-destacado { background: var(--primario); border-color: var(--primario); color: #fff; font-weight: 700; }
-    .accion-btn.accion-destacado:hover { background: var(--primario-oscuro); }
-    .accion-btn.accion-exito { background: var(--exito); border-color: var(--exito); }
-    .accion-btn.accion-exito:hover { background: #155c34; }
-    .accion-btn:disabled { opacity: .45; cursor: not-allowed; }
-    .accion-btn:disabled:hover { background: #f4f5f7; filter: none; }
-    .accion-btn.activo {
-        background: var(--primario);
-        border-color: var(--primario);
-        color: #fff;
-    }
-    .accion-icono { font-style: normal; font-size: 1.1em; }
-    .panel-accion {
-        background: #fff;
-        border: 2px solid var(--primario);
-        border-radius: var(--radio);
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-    }
-    .panel-accion h3 { margin: 0 0 1rem; font-size: 1.1rem; }
-</style>
 <script>
     // ── Barra de acciones: un solo panel abierto a la vez ──────────────────────
     const botonesAccion = document.querySelectorAll('.accion-btn[data-panel]');
@@ -561,11 +806,9 @@
             const panel = document.getElementById(panelId);
             const yaActivo = btn.classList.contains('activo');
 
-            // Cierra todo
             botonesAccion.forEach(b => b.classList.remove('activo'));
             document.querySelectorAll('.panel-accion').forEach(p => p.hidden = true);
 
-            // Si no estaba activo, lo abre
             if (! yaActivo) {
                 btn.classList.add('activo');
                 panel.hidden = false;
@@ -575,7 +818,6 @@
         });
     });
 
-    // Botón "Cancelar" dentro de un panel
     document.querySelectorAll('[data-cerrar-panel]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             botonesAccion.forEach(b => b.classList.remove('activo'));

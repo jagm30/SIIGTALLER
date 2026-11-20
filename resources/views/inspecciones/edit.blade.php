@@ -13,14 +13,112 @@
 
 @section('titulo', $titulo . ' · ' . $orden->folio)
 
+@push('styles')
+<style>
+    /* ── Inspección: hero ──────────────────────────────────────────────── */
+    .ie-hero {
+        background: var(--tarjeta);
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        margin-bottom: 1rem;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .ie-hero-acento {
+        height: 4px;
+    }
+    .ie-hero-cuerpo {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.1rem 1.2rem;
+        flex-wrap: wrap;
+    }
+    .ie-hero-izq {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        min-width: 0;
+    }
+    .ie-hero-icono {
+        flex-shrink: 0;
+        width: 52px; height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        line-height: 1;
+        user-select: none;
+    }
+    .ie-hero-cuerpo h1 { margin: 0 0 .35rem; font-size: 1.35rem; }
+    .ie-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .3rem .5rem;
+    }
+    .ie-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .78rem;
+        font-weight: 600;
+        padding: .15rem .55rem;
+        border-radius: 999px;
+        background: #e8f0fb;
+        color: var(--primario);
+    }
+    .ie-chip-folio {
+        font-family: ui-monospace, monospace;
+        background: #f1f3f5;
+        color: var(--texto);
+        font-weight: 700;
+    }
+    .ie-chip-tenue {
+        background: transparent;
+        color: var(--tenue);
+        font-weight: 400;
+        padding-left: 0;
+    }
+    @media (max-width: 540px) {
+        .ie-hero-icono { width: 44px; height: 44px; font-size: 1.3rem; border-radius: 9px; }
+        .ie-hero-cuerpo h1 { font-size: 1.15rem; }
+    }
+</style>
+@endpush
+
 @section('contenido')
-    <div class="encabezado">
-        <div>
-            <h1>{{ $titulo }}</h1>
-            <p class="tenue">Orden {{ $orden->folio }} · {{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }}
-                · {{ $orden->vehiculo->placas ?? 'Sin placas' }} · {{ $orden->cliente->nombre_completo }}</p>
+    @php
+        $esRecepcion = $inspeccion->esRecepcion();
+        $acentoGrad  = $esRecepcion
+            ? 'linear-gradient(90deg,#1f5fbf 0%,#5b9cf6 100%)'
+            : 'linear-gradient(90deg,#1e7a46 0%,#38a169 100%)';
+        $iconoBg     = $esRecepcion
+            ? 'linear-gradient(135deg,#1f5fbf 0%,#3b82e0 100%)'
+            : 'linear-gradient(135deg,#1e7a46 0%,#38a169 100%)';
+        $icono       = $esRecepcion ? '📋' : '🔑';
+    @endphp
+    <div class="ie-hero">
+        <div class="ie-hero-acento" style="background: {{ $acentoGrad }};"></div>
+        <div class="ie-hero-cuerpo">
+            <div class="ie-hero-izq">
+                <div class="ie-hero-icono" style="background: {{ $iconoBg }};">{{ $icono }}</div>
+                <div>
+                    <h1>{{ $titulo }}</h1>
+                    <div class="ie-chips">
+                        <span class="ie-chip ie-chip-folio">{{ $orden->folio }}</span>
+                        <span class="ie-chip">{{ $orden->vehiculo->marca->nombre }} {{ $orden->vehiculo->modelo->nombre }}</span>
+                        @if ($orden->vehiculo->placas)
+                            <span class="ie-chip">{{ $orden->vehiculo->placas }}</span>
+                        @endif
+                        <span class="ie-chip ie-chip-tenue">{{ $orden->cliente->nombre_completo }}</span>
+                    </div>
+                </div>
+            </div>
+            <a href="{{ route('ordenes.show', $orden) }}" class="boton secundario">Ver orden</a>
         </div>
-        <a href="{{ route('ordenes.show', $orden) }}" class="boton secundario">Ver orden</a>
     </div>
 
     {{-- Lo que falta: se actualiza cada vez que se guarda. Los errores al guardar salen abajo, junto a los botones. --}}
@@ -92,7 +190,7 @@
                 </div>
                 <div class="campo">
                     <label for="persona_telefono">Teléfono de esa persona</label>
-                    <input type="text" id="persona_telefono" name="persona_telefono" value="{{ old('persona_telefono', $inspeccion->persona_telefono) }}" inputmode="tel">
+                    <input type="text" id="persona_telefono" name="persona_telefono" value="{{ old('persona_telefono', $inspeccion->persona_telefono ?? $orden->cliente->telefono) }}" inputmode="tel">
                 </div>
             </div>
         </div>
@@ -328,15 +426,8 @@
         @if ($terminos)
             <p class="chico" style="background: #fafbfc; border: 1px solid var(--borde); border-radius: 6px; padding: .75rem;">{{ $terminos }}</p>
         @endif
-        <div class="rejilla">
-            <div class="campo">
-                <label for="firmante_nombre">Nombre de quien firma</label>
-                <input type="text" id="firmante_nombre" name="firmante_nombre" form="principal"
-                       value="{{ old('firmante_nombre', $inspeccion->firmante_nombre ?? $inspeccion->persona_nombre) }}">
-            </div>
-            <div class="campo" style="align-self: end;">
-                <label class="casilla"><input type="checkbox" name="acepta_terminos" value="1" form="principal" @checked(old('acepta_terminos', $inspeccion->acepta_terminos))> El cliente acepta los términos</label>
-            </div>
+        <div class="campo">
+            <label class="casilla"><input type="checkbox" name="acepta_terminos" value="1" form="principal" @checked(old('acepta_terminos', $inspeccion->acepta_terminos))> El cliente acepta los términos</label>
         </div>
 
         @if ($inspeccion->firma)

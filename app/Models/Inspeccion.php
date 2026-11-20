@@ -113,6 +113,13 @@ class Inspeccion extends Model
             ->latestOfMany();
     }
 
+    public function firmaTaller(): MorphOne
+    {
+        return $this->morphOne(Adjunto::class, 'adjuntable')
+            ->where('tipo', TipoAdjunto::FirmaTaller->value)
+            ->latestOfMany();
+    }
+
     // ── Estado ───────────────────────────────────────────────────
 
     public function estaCompletada(): bool
@@ -178,20 +185,31 @@ class Inspeccion extends Model
      */
     public function guardarFirma(string $dataUrl, User $usuario): void
     {
+        $this->guardarFirmaPorTipo($dataUrl, TipoAdjunto::Firma, 'firma', $usuario);
+    }
+
+    /** Guarda la firma del encargado del taller en el acta de entrega. */
+    public function guardarFirmaTaller(string $dataUrl, User $usuario): void
+    {
+        $this->guardarFirmaPorTipo($dataUrl, TipoAdjunto::FirmaTaller, 'firma_taller', $usuario);
+    }
+
+    private function guardarFirmaPorTipo(string $dataUrl, TipoAdjunto $tipo, string $campo, User $usuario): void
+    {
         $png = base64_decode(substr($dataUrl, strlen('data:image/png;base64,')), true);
 
         if ($png === false || ! str_starts_with($png, "\x89PNG")) {
-            throw ValidationException::withMessages(['firma' => 'La firma no se pudo leer. Intenta de nuevo.']);
+            throw ValidationException::withMessages([$campo => 'La firma no se pudo leer. Intenta de nuevo.']);
         }
 
-        $this->adjuntos()->where('tipo', TipoAdjunto::Firma->value)->get()->each->eliminar();
+        $this->adjuntos()->where('tipo', $tipo->value)->get()->each->eliminar();
 
         // Pasa por un archivo temporal para usar el mismo camino que las fotos (ruta + huella SHA-256).
         $temporal = tempnam(sys_get_temp_dir(), 'firma');
         file_put_contents($temporal, $png);
 
         try {
-            Adjunto::desdeArchivo($this, new UploadedFile($temporal, 'firma.png', 'image/png', null, true), TipoAdjunto::Firma, $usuario);
+            Adjunto::desdeArchivo($this, new UploadedFile($temporal, 'firma.png', 'image/png', null, true), $tipo, $usuario);
         } finally {
             unlink($temporal);
         }

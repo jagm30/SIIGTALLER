@@ -112,9 +112,10 @@ class OrdenFlujoTest extends TestCase
         $orden = $this->ordenConRecepcion($this->recepcion);
         $this->actingAs($this->admin);
 
-        // El orden fijo es: acciones → trabajos → refacciones → datos → recepción → entrega
+        // El orden fijo es: acciones → trabajos → refacciones → recepción → entrega
+        // ('Datos de la orden' está oculto en estado Recibido)
         $this->get(route('ordenes.show', $orden))
-            ->assertSeeInOrder(['Trabajos realizados', 'Refacciones utilizadas', '<h2>Datos de la orden</h2>', '<h2>Recepción</h2>', '<h2>Entrega</h2>'], false);
+            ->assertSeeInOrder(['Trabajos a realizar', 'Refacciones a utilizar', '<h2>Recepción</h2>', '<h2>Entrega</h2>'], false);
 
         // En diagnóstico se mantiene el mismo orden y el motivo de ingreso sigue a la vista en Recepción
         $orden->cambiarEstado(EstadoOrden::Diagnostico, $this->mecanico);
@@ -148,32 +149,31 @@ class OrdenFlujoTest extends TestCase
         $this->assertSame('No autorizó', $orden->fresh()->motivo_cancelacion);
     }
 
-    public function test_el_estado_por_autorizar_ya_no_se_puede_elegir(): void
+    public function test_por_autorizar_es_un_estado_valido_y_aparece_en_el_ciclo_de_vida(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);
 
-        // Ni en el menú de la orden ni en el filtro de la lista
+        // El estado está en uso y aparece en la vista
+        $this->assertContains(EstadoOrden::PorAutorizar, EstadoOrden::abiertos());
         $this->actingAs($this->admin)->get(route('ordenes.show', $orden))
-            ->assertOk()->assertDontSee('value="por_autorizar"', false)->assertSee('value="diagnostico"', false);
-        $this->get(route('ordenes.index'))->assertDontSee('Por autorizar');
+            ->assertOk()->assertSee('value="por_autorizar"', false);
 
-        // Ni mandándolo a mano
-        $this->post(route('ordenes.estado', $orden), ['estado' => 'por_autorizar'])->assertSessionHasErrors('estado');
-        $this->assertSame(EstadoOrden::Recibido, $orden->fresh()->estado);
-        $this->assertNotContains(EstadoOrden::PorAutorizar, EstadoOrden::abiertos());
+        // El label refleja el nuevo nombre
+        $this->assertSame('En espera de autorización', EstadoOrden::PorAutorizar->label());
     }
 
-    public function test_las_ordenes_que_pasaron_por_autorizar_se_siguen_viendo(): void
+    public function test_la_bitacora_muestra_el_paso_por_espera_de_autorizacion(): void
     {
         $orden = $this->ordenConRecepcion($this->recepcion);
         $orden->bitacoraEstados()->create([
             'estado_anterior' => EstadoOrden::Diagnostico,
-            'estado_nuevo' => EstadoOrden::PorAutorizar,
-            'user_id' => $this->admin->id,
+            'estado_nuevo'    => EstadoOrden::PorAutorizar,
+            'user_id'         => $this->admin->id,
         ]);
 
-        // La bitácora vieja conserva su historia
-        $this->actingAs($this->admin)->get(route('ordenes.show', $orden))->assertOk()->assertSee('Por autorizar');
+        $this->actingAs($this->admin)->get(route('ordenes.show', $orden))
+            ->assertOk()
+            ->assertSee(EstadoOrden::PorAutorizar->label()); // 'En espera de autorización'
     }
 
 public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void

@@ -105,7 +105,7 @@
     </div>
     <div class="campo">
         <label for="anio">Año</label>
-        <input type="number" id="anio" name="anio" value="{{ old('anio', $vehiculo->anio) }}" inputmode="numeric">
+        <input type="number" id="anio" name="anio" value="{{ old('anio', $vehiculo->anio) }}" inputmode="numeric" min="1900" max="2099">
     </div>
     <div class="campo">
         <label for="color">Color</label>
@@ -117,7 +117,7 @@
     </div>
     <div class="campo">
         <label for="numero_motor">Número de motor</label>
-        <input type="text" id="numero_motor" name="numero_motor" value="{{ old('numero_motor', $vehiculo->numero_motor) }}">
+        <input type="text" id="numero_motor" name="numero_motor" value="{{ old('numero_motor', $vehiculo->numero_motor) }}" maxlength="30">
     </div>
     <div class="campo">
         <label for="combustible">Combustible</label>

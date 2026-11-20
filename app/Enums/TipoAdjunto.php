@@ -9,6 +9,7 @@ enum TipoAdjunto: string
 {
     case Foto = 'foto';
     case Firma = 'firma';
+    case FirmaTaller = 'firma_taller';
     case Documento = 'documento';
 
     public function label(): string
@@ -16,6 +17,7 @@ enum TipoAdjunto: string
         return match ($this) {
             self::Foto => 'Foto',
             self::Firma => 'Firma',
+            self::FirmaTaller => 'Firma del taller',
             self::Documento => 'Documento',
         };
     }

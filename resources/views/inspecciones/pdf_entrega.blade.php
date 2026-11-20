@@ -121,7 +121,12 @@
                 </div>
             </td>
             <td></td>
-            <td style="width: 45%; text-align: center; vertical-align: bottom;">
+            <td style="width: 45%; text-align: center;">
+                @if ($inspeccion->firmaTaller && ($firmaTaller = $inspeccion->firmaTaller->dataUri()))
+                    <img src="{{ $firmaTaller }}" alt="">
+                @else
+                    <div style="height: 2.2cm;"></div>
+                @endif
                 <div class="linea">{{ $inspeccion->realizadaPor->name }}<br><span class="tenue">Por el taller</span></div>
             </td>
         </tr>

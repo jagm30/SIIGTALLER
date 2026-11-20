@@ -130,6 +130,14 @@ trait DatosDelTaller
         ]);
     }
 
+    /** Completa una inspección de entrega con los datos mínimos requeridos (firmante + firma). */
+    protected function completarEntrega(\App\Models\Inspeccion $entrega): void
+    {
+        $entrega->update(['firmante_nombre' => 'Juan Pérez']);
+        $this->adjuntoFalso($entrega, TipoAdjunto::Firma);
+        $entrega->completar();
+    }
+
     /** Firma dibujada como la manda el canvas del navegador: data:image/png;base64,... */
     protected function firmaPng(): string
     {
