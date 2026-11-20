@@ -114,6 +114,16 @@ class RecepcionTest extends TestCase
         $this->assertSame('Gato', $respuesta->item_nombre);
     }
 
+    public function test_la_recepcion_propone_una_llave_entregada_por_defecto(): void
+    {
+        $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
+        $llaves = ChecklistItem::where('nombre', 'Llaves entregadas (cantidad)')->firstOrFail();
+
+        $this->actingAs($this->recepcion)->get(route('inspecciones.edit', $orden->recepcion))
+            ->assertOk()
+            ->assertSee('name="respuestas[' . $llaves->id . '][valor]" value="1"', false);
+    }
+
     public function test_el_checklist_compacto_trae_marcar_todos_por_grupo(): void
     {
         $orden = OrdenServicio::abrir($this->vehiculo(), $this->recepcion, 'Revisión');
