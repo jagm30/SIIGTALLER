@@ -521,52 +521,68 @@
     @endif
 </div>
 
-{{-- ══ Recordatorios por vencer ════════════════════════════════════════ --}}
-@if ($recordatorios->isNotEmpty())
+{{-- ══ Próximos servicios (solo admin / recepción) ═════════════════════ --}}
+@if ($esAdmin)
 <div class="tarjeta">
     <div class="db-sec-hdr">
-        <h2>Servicios por vencer</h2>
-        <span class="tenue chico">próximos 15 días · {{ $recordatorios->count() }}</span>
+        <h2>Próximos servicios</h2>
+        @if ($recordatorios->isNotEmpty())
+            <span class="tenue chico">{{ $recordatorios->count() }} por contactar</span>
+        @endif
     </div>
-    <div class="tabla-scroll">
-        <table>
-            <thead>
+
+    @if ($recordatorios->isEmpty())
+        <div class="db-vacio">No hay servicios programados.</div>
+    @else
+        <div class="tabla-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Placas</th>
+                        <th>Próximo servicio</th>
+                        <th class="ocultar-movil">Servicio</th>
+                        <th class="ocultar-movil">Cliente</th>
+                        <th>Teléfono</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach ($recordatorios as $r)
+                @php
+                    $diasHasta = (int) today()->diffInDays($r->fecha_programada, false);
+                    $claseRec  = $diasHasta <= 2 ? 'db-rec-badge--pronto'
+                               : ($diasHasta <= 7 ? 'db-rec-badge--medio'
+                               : 'db-rec-badge--tranquilo');
+                    $telefono  = $r->vehiculo->cliente->telefono;
+                @endphp
                 <tr>
-                    <th>Fecha</th>
-                    <th>Vehículo</th>
-                    <th>Servicio</th>
-                    <th class="ocultar-movil">Cliente</th>
+                    <td>
+                        <a href="{{ route('vehiculos.show', $r->vehiculo) }}" class="db-folio">
+                            {{ $r->vehiculo->placas ?? 'Sin placas' }}
+                        </a>
+                        <br>
+                        <span class="tenue chico">{{ $r->vehiculo->modelo->nombre }}</span>
+                    </td>
+                    <td>
+                        <span class="db-rec-badge {{ $claseRec }}">{{ $r->fecha_programada->format('d/m/Y') }}</span>
+                        @if ($r->estaVencido())
+                            <span class="db-promesa">⚠ vencido</span>
+                        @endif
+                    </td>
+                    <td class="ocultar-movil">{{ $r->descripcion }}</td>
+                    <td class="ocultar-movil">{{ $r->vehiculo->cliente->nombre_completo }}</td>
+                    <td style="white-space:nowrap;">
+                        @if ($telefono)
+                            <a href="tel:{{ $telefono }}">{{ $telefono }}</a>
+                        @else
+                            <span class="tenue">—</span>
+                        @endif
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-            @foreach ($recordatorios as $r)
-            @php
-                $diasHasta = (int) $ahora->diffInDays($r->fecha_programada);
-                $claseRec  = $diasHasta <= 2 ? 'db-rec-badge--pronto'
-                           : ($diasHasta <= 7 ? 'db-rec-badge--medio'
-                           : 'db-rec-badge--tranquilo');
-            @endphp
-            <tr>
-                <td>
-                    <span class="db-rec-badge {{ $claseRec }}">{{ $r->fecha_programada->format('d/m') }}</span>
-                </td>
-                <td>
-                    <a href="{{ route('vehiculos.show', $r->vehiculo) }}">
-                        {{ $r->vehiculo->modelo->nombre }} · {{ $r->vehiculo->placas }}
-                    </a>
-                </td>
-                <td>{{ $r->descripcion }}</td>
-                <td class="ocultar-movil">
-                    {{ $r->vehiculo->cliente->nombre_completo }}
-                    @if ($r->vehiculo->cliente->telefono)
-                        · <span class="tenue">{{ $r->vehiculo->cliente->telefono }}</span>
-                    @endif
-                </td>
-            </tr>
-            @endforeach
-            </tbody>
-        </table>
-    </div>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 </div>
 @endif
 

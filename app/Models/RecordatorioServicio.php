@@ -66,12 +66,16 @@ class RecordatorioServicio extends Model
         return $query->where('estado', EstadoRecordatorio::Pendiente->value);
     }
 
-    /** Pendientes cuya fecha vence dentro de $dias días (para el tablero). */
-    public function scopePorVencer(Builder $query, int $dias = 15): Builder
+    /** Pendientes con fecha, del más cercano (o ya vencido) al más lejano, para el tablero. */
+    public function scopeProximos(Builder $query): Builder
     {
         return $query->pendientes()
             ->whereNotNull('fecha_programada')
-            ->whereDate('fecha_programada', '<=', now()->addDays($dias))
             ->orderBy('fecha_programada');
+    }
+
+    public function estaVencido(): bool
+    {
+        return $this->fecha_programada?->isBefore(today()) ?? false;
     }
 }

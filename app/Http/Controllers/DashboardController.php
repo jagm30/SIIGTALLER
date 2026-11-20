@@ -34,7 +34,7 @@ class DashboardController extends Controller
 
         // Al mecánico no le sirven los recordatorios de clientes; solo a recepción y administración.
         $recordatorios = $user->tienePermiso('ordenes.ver_todas')
-            ? RecordatorioServicio::porVencer(15)->with('vehiculo.cliente', 'vehiculo.modelo')->limit(20)->get()
+            ? RecordatorioServicio::proximos()->with('vehiculo.cliente', 'vehiculo.modelo')->limit(15)->get()
             : collect();
 
         $verPrecios = PreferenciaOperacion::bool('usar_precios', $user->sucursal_id, true)
