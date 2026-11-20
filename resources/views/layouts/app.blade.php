@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('titulo', 'Taller') · {{ config('app.name') }}</title>
+    <title>@yield('titulo', 'Taller') · {{ $nombreTaller }}</title>
     @include('layouts.estilos')
     @stack('styles')
 </head>
@@ -11,7 +11,7 @@
 @unless($publico ?? false)
     @auth
         <header class="barra">
-            <a href="{{ route('dashboard') }}" class="marca">🔧 {{ config('app.name') }}</a>
+            <a href="{{ route('dashboard') }}" class="marca">@include('layouts._logo', ['clase' => 'marca-logo']) {{ $nombreTaller }}</a>
             <nav>
                 <a href="{{ route('dashboard') }}" @class(['activo' => request()->routeIs('dashboard')])>Inicio</a>
                 <a href="{{ route('ordenes.index') }}" @class(['activo' => request()->routeIs('ordenes.*', 'inspecciones.*')])>Órdenes</a>

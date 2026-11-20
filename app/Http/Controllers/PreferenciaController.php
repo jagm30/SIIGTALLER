@@ -18,7 +18,7 @@ class PreferenciaController extends Controller
 {
     public function edit(): View
     {
-        $preferencias = PreferenciaOperacion::whereNull('sucursal_id')
+        $preferencias = PreferenciaOperacion::whereNull('sucursal_id')->where('grupo', '!=', PreferenciaOperacion::GRUPO_TALLER)
             ->orderBy('grupo')->orderBy('id')->get()
             ->groupBy('grupo');
 
@@ -31,7 +31,7 @@ class PreferenciaController extends Controller
         $valores = $request->input('valores', []);
         $errores = [];
 
-        $preferencias = PreferenciaOperacion::whereNull('sucursal_id')->get();
+        $preferencias = PreferenciaOperacion::whereNull('sucursal_id')->where('grupo', '!=', PreferenciaOperacion::GRUPO_TALLER)->get();
 
         // Primero validamos todo; si algo está mal no guardamos nada.
         foreach ($preferencias as $p) {

@@ -34,6 +34,8 @@ class PreferenciasOperacionSeeder extends Seeder
         ['recordatorios', 'recordatorios_activos', 'bool', '1', 'Programa el próximo servicio al entregar el vehículo.'],
         ['recordatorios', 'recordatorio_meses_default', 'int', '6', 'Meses para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin fecha).'],
         ['recordatorios', 'recordatorio_km_default', 'int', '10000', 'Kilómetros para el próximo servicio cuando el servicio no tiene intervalo propio (0 = sin km).'],
+        ['taller', 'taller_nombre', 'string', null, 'Nombre del taller que aparece en la barra, el inicio de sesión, la página del QR y los documentos.'],
+        ['taller', 'taller_logo', 'string', null, 'Logo del taller (ruta del archivo guardado).'],
     ];
 
     public function run(): void

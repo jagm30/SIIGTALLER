@@ -31,9 +31,12 @@
 
     <table class="encabezado">
         <tr>
+            @if ($logoTaller)
+                <td style="width: 2.4cm; padding-right: 6pt;"><img src="{{ $logoTaller }}" alt="" style="max-width: 2.4cm; max-height: 1.4cm;"></td>
+            @endif
             <td>
                 <h1>Acta de entrega del vehículo</h1>
-                <span class="tenue">{{ config('app.name') }} · {{ $orden->sucursal->nombre }}
+                <span class="tenue">{{ $nombreTaller }} · {{ $orden->sucursal->nombre }}
                     @if ($orden->sucursal->direccion) · {{ $orden->sucursal->direccion }} @endif
                     @if ($orden->sucursal->telefono) · Tel. {{ $orden->sucursal->telefono }} @endif</span>
             </td>

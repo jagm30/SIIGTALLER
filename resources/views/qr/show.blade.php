@@ -33,6 +33,12 @@
     font-size: 1.1rem;
     line-height: 1;
 }
+.qr-topbar-logo {
+    display: block;
+    height: 26px; width: auto; max-width: 100px;
+    object-fit: contain;
+    background: #fff; border-radius: 4px; padding: 2px;
+}
 
 /* ── Área principal ────────────────────────────────────────────── */
 .qr {
@@ -365,8 +371,8 @@ details[open] .qr-s-flecha { transform: rotate(180deg); }
 
 {{-- ── Barra superior ─────────────────────────────────────────────── --}}
 <div class="qr-topbar">
-    <span class="qr-topbar-icono">🔧</span>
-    {{ config('app.name') }}
+    <span class="qr-topbar-icono">@include('layouts._logo', ['clase' => 'qr-topbar-logo'])</span>
+    {{ $nombreTaller }}
 </div>
 
 <div class="qr">
@@ -484,7 +490,7 @@ details[open] .qr-s-flecha { transform: rotate(180deg); }
         @endforelse
     </div>
 
-    <p class="qr-pie">{{ config('app.name') }} · historial de tu vehículo</p>
+    <p class="qr-pie">{{ $nombreTaller }} · historial de tu vehículo</p>
 
 </div>
 @endsection

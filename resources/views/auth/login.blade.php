@@ -4,7 +4,7 @@
 
 @section('contenido')
     <div class="tarjeta" style="max-width: 420px; margin: 3rem auto;">
-        <h1>🔧 {{ config('app.name') }}</h1>
+        <h1 class="login-marca">@include('layouts._logo', ['clase' => 'login-logo']) {{ $nombreTaller }}</h1>
         <p class="tenue">Inicia sesión para continuar.</p>
 
         <form method="POST" action="{{ url('/login') }}">

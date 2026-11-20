@@ -4,6 +4,7 @@ use App\Http\Controllers\AdjuntoController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\IdentidadTallerController;
 use App\Http\Controllers\InspeccionController;
 use App\Http\Controllers\InspeccionDanioController;
 use App\Http\Controllers\MarcaController;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Route;
 | Página pública del QR: la ve el cliente desde su celular, sin iniciar sesión.
 */
 Route::get('/v/{token}', [QrController::class, 'show'])->name('qr.show');
+Route::get('/logo-taller', [IdentidadTallerController::class, 'logo'])->name('taller.logo');
 
 /*
 | Inicio de sesión
@@ -101,4 +103,5 @@ Route::middleware('auth')->group(function () {
         ->parameters(['usuarios' => 'usuario'])->middleware('can:usuarios.gestionar');
     Route::get('/preferencias', [PreferenciaController::class, 'edit'])->middleware('can:preferencias.editar')->name('preferencias.edit');
     Route::put('/preferencias', [PreferenciaController::class, 'update'])->middleware('can:preferencias.editar')->name('preferencias.update');
+    Route::put('/preferencias/taller', [IdentidadTallerController::class, 'update'])->middleware('can:preferencias.editar')->name('preferencias.taller');
 });

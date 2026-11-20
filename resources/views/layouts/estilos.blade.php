@@ -18,7 +18,10 @@
     .barra { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; padding: .6rem 1rem; background: #1f2933; color: #fff; }
     .barra a { color: #d6dde6; text-decoration: none; padding: .35rem .6rem; border-radius: 6px; transition: background .15s; }
     .barra a.activo, .barra a:hover { background: #34414f; color: #fff; }
-    .barra .marca { font-weight: 700; color: #fff; }
+    .barra .marca { display: inline-flex; align-items: center; gap: .45rem; font-weight: 700; color: #fff; }
+    .marca-logo { height: 30px; width: auto; max-width: 120px; object-fit: contain; background: #fff; border-radius: 4px; padding: 2px; }
+    .login-marca { display: flex; align-items: center; gap: .6rem; }
+    .login-logo { height: 48px; width: auto; max-width: 160px; object-fit: contain; }
     .barra nav { display: flex; flex-wrap: wrap; gap: .25rem; flex: 1; }
     .barra .salir { display: flex; align-items: center; gap: .5rem; }
     .barra .tenue { color: #aab4bf; font-size: .875rem; }

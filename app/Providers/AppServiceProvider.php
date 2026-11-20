@@ -6,9 +6,11 @@ use App\Enums\Rol;
 use App\Models\Inspeccion;
 use App\Models\InspeccionDanio;
 use App\Models\OrdenServicio;
+use App\Models\PreferenciaOperacion;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -44,5 +46,15 @@ class AppServiceProvider extends ServiceProvider
             return $user->tienePermiso('ordenes.ver_todas')
                 || OrdenServicio::asignadasA($user)->whereKey($orden->id)->exists();
         });
+
+        // Nombre y logo del taller (se editan en Preferencias) para las vistas que los muestran.
+        View::composer(['layouts.app', 'auth.login', 'qr.show', 'qr.imprimir', 'preferencias.edit'], fn ($view) => $view->with([
+            'nombreTaller' => PreferenciaOperacion::nombreTaller(),
+            'logoTaller' => PreferenciaOperacion::urlLogoTaller(),
+        ]));
+        View::composer(['inspecciones.pdf', 'inspecciones.pdf_entrega'], fn ($view) => $view->with([
+            'nombreTaller' => PreferenciaOperacion::nombreTaller(),
+            'logoTaller' => PreferenciaOperacion::logoTallerDataUri(),
+        ]));
     }
 }

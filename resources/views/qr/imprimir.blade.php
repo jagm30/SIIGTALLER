@@ -46,6 +46,10 @@
     font-size: .72rem; font-weight: 800; letter-spacing: .12em;
     text-transform: uppercase; color: var(--tenue); margin: 0 0 1.1rem;
 }
+.qr-ticket-logo {
+    display: block; margin: 0 auto .4rem;
+    height: 48px; width: auto; max-width: 160px; object-fit: contain;
+}
 
 .qr-ticket-qr {
     display: inline-block;
@@ -118,7 +122,7 @@
 
 @if ($vehiculo->qr_activo)
     <div class="qr-ticket">
-        <p class="qr-ticket-marca">🔧 {{ config('app.name') }}</p>
+        <p class="qr-ticket-marca">@include('layouts._logo', ['clase' => 'qr-ticket-logo']) {{ $nombreTaller }}</p>
 
         <div class="qr-ticket-qr">{!! $vehiculo->qrSvg() !!}</div>
 
