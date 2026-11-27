@@ -51,7 +51,7 @@ class OrdenFlujoTest extends TestCase
 
         // El mecánico registra observaciones y el trabajo con sus piezas sugeridas
         $this->patch(route('ordenes.update', $orden), ['observaciones' => 'Aceite degradado', 'descuento' => 500])->assertSessionHas('ok');
-        $this->post(route('trabajos.store', $orden), ['servicio_id' => $aceite->id, 'agregar_sugeridas' => '1'])->assertSessionHas('ok');
+        $this->post(route('trabajos.store', $orden), ['servicio_id' => $aceite->id, 'refacciones_sugeridas' => [$filtro->id]])->assertSessionHas('ok');
         $this->post(route('trabajos.store', $orden), ['descripcion' => 'Revisión de frenos', 'tipo_cobro' => 'por_hora', 'cantidad' => 1])->assertSessionHas('ok');
 
         $orden->refresh();
@@ -212,7 +212,7 @@ public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
         $afinacion->refaccionesSugeridas()->attach([$bujia->id => ['cantidad' => 4], $filtro->id => ['cantidad' => 1]]);
 
         // Como administrador, para poder capturar el precio de la pieza suelta
-        $this->actingAs($this->admin)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+        $this->actingAs($this->admin)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'refacciones_sugeridas' => [$bujia->id, $filtro->id]]);
         // Una pieza suelta, sin trabajo: no debe borrarse
         $this->post(route('refacciones-usadas.store', $orden), ['refaccion_id' => 'otra', 'descripcion' => 'Limpiador', 'cantidad' => 1, 'precio_unitario' => 50]);
         $this->assertSame(3, $orden->refacciones()->count());
@@ -247,7 +247,7 @@ public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
         $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza', 'precio_venta' => 100]);
         $afinacion->refaccionesSugeridas()->attach($bujia->id, ['cantidad' => 4]);
 
-        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'refacciones_sugeridas' => [$bujia->id]]);
         $trabajo = $orden->trabajos()->firstOrFail();
 
         // Sin elegir trabajo: la bujía solo está en un renglón, se suma ahí
@@ -310,7 +310,7 @@ public function test_un_vehiculo_no_puede_tener_dos_ordenes_abiertas(): void
         $bujia = Refaccion::create(['descripcion' => 'Bujía', 'unidad' => 'pieza']);
         $afinacion->refaccionesSugeridas()->attach($bujia->id, ['cantidad' => 4]);
 
-        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'agregar_sugeridas' => '1']);
+        $this->actingAs($this->mecanico)->post(route('trabajos.store', $orden), ['servicio_id' => $afinacion->id, 'refacciones_sugeridas' => [$bujia->id]]);
 
         $this->get(route('ordenes.show', $orden))
             ->assertSeeInOrder(['Para el trabajo', 'Bujía', 'Afinación mayor']);

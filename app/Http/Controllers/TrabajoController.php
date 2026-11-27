@@ -43,7 +43,8 @@ class TrabajoController extends Controller
             'notas' => ['nullable', 'string', 'max:2000'],
             'mecanicos' => ['nullable', 'array'],
             'mecanicos.*' => [Rule::exists('users', 'id')->where('rol', Rol::Mecanico->value)],
-            'agregar_sugeridas' => ['boolean'],
+            'refacciones_sugeridas'   => ['nullable', 'array'],
+            'refacciones_sugeridas.*' => ['integer', 'exists:refacciones,id'],
         ], ['descripcion.required_without' => 'Elige un servicio del catálogo o describe el trabajo.']);
 
         $servicio = isset($datos['servicio_id']) ? Servicio::find($datos['servicio_id']) : null;
@@ -67,13 +68,14 @@ class TrabajoController extends Controller
             $mecanicos = $datos['mecanicos'] ?? ($request->user()->esMecanico() ? [$request->user()->id] : []);
             $trabajo->mecanicos()->sync($mecanicos);
 
-            // Agrega las piezas que normalmente lleva el servicio (ej. afinación → bujías y filtros).
-            if ($servicio && $request->boolean('agregar_sugeridas')) {
-                foreach ($servicio->refaccionesSugeridas as $refaccion) {
+            // Agrega solo las piezas que el usuario marcó en los checkboxes de refacciones sugeridas.
+            if ($servicio && ! empty($datos['refacciones_sugeridas'])) {
+                $seleccionadas = $servicio->refaccionesSugeridas->whereIn('id', $datos['refacciones_sugeridas']);
+                foreach ($seleccionadas as $refaccion) {
                     $orden->refacciones()->create([
                         'orden_servicio_item_id' => $trabajo->id,
-                        'refaccion_id' => $refaccion->id,
-                        'cantidad' => $refaccion->pivot->cantidad,
+                        'refaccion_id'           => $refaccion->id,
+                        'cantidad'               => $refaccion->pivot->cantidad,
                     ]);
                 }
             }

@@ -110,8 +110,17 @@ class OrdenServicioController extends Controller
         return view('ordenes.show', [
             'orden' => $orden,
             'mecanicos' => User::activos()->conRol(Rol::Mecanico)->orderBy('name')->get(),
-            // Con el conteo de sugeridas, la vista sabe si mostrar la casilla de "agregar refacciones".
-            'servicios' => Servicio::activos()->withCount('refaccionesSugeridas')->get(),
+            // Cargamos las sugeridas con su pivote para renderizar los checkboxes individuales en el panel.
+            'servicios' => $servicios = Servicio::activos()->with('refaccionesSugeridas')->withCount('refaccionesSugeridas')->get(),
+            // JSON listo para el JS del panel: { servicioId: [{id, descripcion, cantidad, unidad}] }
+            'sugeridasJson' => $servicios->mapWithKeys(fn ($s) => [
+                $s->id => $s->refaccionesSugeridas->map(fn ($r) => [
+                    'id'          => $r->id,
+                    'descripcion' => $r->descripcion,
+                    'cantidad'    => (float) $r->pivot->cantidad,
+                    'unidad'      => $r->unidad->label(),
+                ]),
+            ])->toJson(),
             'refaccionesCatalogo' => Refaccion::activas()->get(),
             // Si está apagado en Preferencias, los mecánicos no capturan horas en sus trabajos.
             'registraHoras' => PreferenciaOperacion::bool('mecanicos_registran_horas', $orden->sucursal_id, true),

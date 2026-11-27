@@ -249,6 +249,64 @@
         margin-top: .1rem;
     }
 
+    /* ── Tarjetas de selección de servicio ──────────────────────────────── */
+    #tarjetas-servicios {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+        gap: .4rem;
+        max-height: 270px;
+        overflow-y: auto;
+        padding: 2px;
+    }
+    .tarj-srv {
+        padding: .65rem .75rem;
+        border: 2px solid var(--borde);
+        border-radius: var(--radio);
+        background: #fff;
+        cursor: pointer;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+        font: inherit;
+        transition: border-color .15s, background .15s;
+        min-height: 56px;
+    }
+    .tarj-srv:hover { border-color: #a0aec0; background: #f7f9fc; }
+    .tarj-srv.tarj-sel {
+        border-color: var(--primario);
+        background: #e8edf9;
+        box-shadow: 0 0 0 1px var(--primario);
+    }
+    .tarj-srv-nombre { font-weight: 600; font-size: .9rem; color: var(--texto); line-height: 1.3; }
+    .tarj-srv-info { font-size: .77rem; color: var(--tenue); }
+    .tarj-srv[data-ya-esta] { opacity: .75; }
+
+    /* ── Lista buscable de refacciones ───────────────────────────────────── */
+    #lista-refacciones-sel {
+        border: 1px solid var(--borde);
+        border-radius: var(--radio);
+        max-height: 220px;
+        overflow-y: auto;
+        background: #fff;
+    }
+    .ref-opcion {
+        padding: .6rem .75rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f1f3;
+        font-size: .93rem;
+        color: var(--texto);
+        transition: background .1s;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+    .ref-opcion:last-child { border-bottom: none; }
+    .ref-opcion:hover { background: #eef2fb; }
+    .ref-opcion.ref-sel { background: #e8edf9; color: var(--primario); font-weight: 600; }
+    .ref-opcion-otra { color: var(--tenue); font-style: italic; border-top: 1px solid var(--borde) !important; }
+    .ref-sin-resultado { padding: .6rem .75rem; color: var(--tenue); font-size: .9rem; }
+
     /* ── Responsive ─────────────────────────────────────────────────────── */
     @media (max-width: 600px) {
         .or-folio-titulo { font-size: 1.25rem; }
@@ -381,22 +439,57 @@
                     @csrf
                     <h3>Agregar trabajo</h3>
                     @php($serviciosEnOrden = $orden->trabajos->pluck('servicio_id')->filter())
-                    <div class="rejilla">
-                        <div class="campo">
-                            <label for="servicio_id">Servicio</label>
-                            <select id="servicio_id" name="servicio_id" required data-otro="#trabajo-otro" data-valor-otro="otro">
-                                <option value="">Elige un servicio…</option>
-                                @foreach ($servicios as $s)
-                                    <option value="{{ $s->id }}"
-                                        data-sugeridas="{{ $s->refacciones_sugeridas_count }}"
+
+                    {{-- Select nativo oculto: lo usa el formulario y los listeners de sugeridas/otro --}}
+                    <select id="servicio_id" name="servicio_id" data-otro="#trabajo-otro" data-valor-otro="otro" style="display:none" aria-hidden="true">
+                        <option value="">Elige un servicio…</option>
+                        @foreach ($servicios as $s)
+                            <option value="{{ $s->id }}"
+                                data-sugeridas="{{ $s->refacciones_sugeridas_count }}"
+                                @if ($serviciosEnOrden->contains($s->id)) data-ya-esta @endif>
+                                {{ $s->nombre }}
+                            </option>
+                        @endforeach
+                        <option value="otro">Otro trabajo (escribirlo)…</option>
+                    </select>
+
+                    {{-- Selector visual: tarjetas de servicio --}}
+                    <div class="campo">
+                        <label>Elige el servicio</label>
+                        <input type="search" id="buscar-servicio-grilla" placeholder="Buscar servicio…" autocomplete="off" style="margin-bottom:.5rem;">
+                        <div id="tarjetas-servicios">
+                            @foreach ($servicios as $s)
+                                <button type="button" class="tarj-srv"
+                                        data-id="{{ $s->id }}"
                                         @if ($serviciosEnOrden->contains($s->id)) data-ya-esta @endif>
-                                        {{ $s->nombre }} · {{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif
-                                        @if ($serviciosEnOrden->contains($s->id)) (ya está en la orden) @endif
-                                    </option>
-                                @endforeach
-                                <option value="otro">Otro trabajo (escribirlo)…</option>
-                            </select>
+                                    <span class="tarj-srv-nombre">{{ $s->nombre }}</span>
+                                    <span class="tarj-srv-info">{{ $s->tipo_cobro->label() }}@if ($verPrecios && $s->precio !== null) · ${{ number_format($s->precio, 2) }}@endif @if ($serviciosEnOrden->contains($s->id))· (ya está en la orden)@endif</span>
+                                </button>
+                            @endforeach
+                            <button type="button" class="tarj-srv" data-id="otro">
+                                <span class="tarj-srv-nombre">Otro trabajo…</span>
+                                <span class="tarj-srv-info">Escribir descripción</span>
+                            </button>
                         </div>
+                    </div>
+
+                    <p id="aviso-repetido" class="aviso alerta" hidden>
+                        Este servicio ya está en la orden. Si es el mismo trabajo, mejor cambia la cantidad del que ya existe.
+                        Si es otro (por ejemplo, en otra pieza del auto), puedes agregarlo.
+                    </p>
+                    <div id="seccion-sugeridas" hidden style="margin-top:.6rem;">
+                        <div class="fila" style="justify-content:space-between; align-items:baseline; margin-bottom:.45rem;">
+                            <p class="chico tenue" style="margin:0;">Refacciones sugeridas — desmarca las que no se van a usar:</p>
+                            <span style="display:flex; gap:.6rem; white-space:nowrap;">
+                                <button type="button" class="boton-link chico" id="btn-marcar-todas">Marcar todas</button>
+                                <span class="tenue">·</span>
+                                <button type="button" class="boton-link chico" id="btn-desmarcar-todas">Desmarcar todas</button>
+                            </span>
+                        </div>
+                        <div id="lista-sugeridas" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:.3rem .75rem;"></div>
+                    </div>
+
+                    <div class="rejilla" style="margin-top:.75rem;">
                         <div class="campo">
                             <label for="cantidad">Cantidad u horas</label>
                             <input type="number" id="cantidad" name="cantidad" step="0.25" min="0.25" value="1">
@@ -434,13 +527,6 @@
                         @endif
                     </div>
 
-                    <p id="aviso-repetido" class="aviso alerta" hidden>
-                        Este servicio ya está en la orden. Si es el mismo trabajo, mejor cambia la cantidad del que ya existe.
-                        Si es otro (por ejemplo, en otra pieza del auto), puedes agregarlo.
-                    </p>
-                    <label id="casilla-sugeridas" class="casilla campo" hidden>
-                        <input type="checkbox" name="agregar_sugeridas" value="1" checked> Agregar las refacciones que normalmente lleva el servicio
-                    </label>
                     <div class="fila" style="margin-top: .75rem;">
                         <button class="boton">Guardar trabajo</button>
                         <button type="button" class="boton secundario" data-cerrar-panel>Cancelar</button>
@@ -453,18 +539,24 @@
                 <form method="POST" action="{{ route('refacciones-usadas.store', $orden) }}">
                     @csrf
                     <h3>Agregar refacción</h3>
-                    <p class="tenue chico">Si la pieza ya está en la orden para el mismo trabajo, se suma a ese renglón.</p>
+
+                    {{-- Select nativo oculto: lo usa el formulario y el listener data-otro --}}
+                    <select id="refaccion_id" name="refaccion_id" data-otro="#refaccion-otra" data-valor-otro="otra" style="display:none" aria-hidden="true">
+                        <option value="">— Elige una refacción —</option>
+                        @foreach ($refaccionesCatalogo as $rc)
+                            <option value="{{ $rc->id }}">{{ $rc->descripcion }}@if ($rc->marca) · {{ $rc->marca }}@endif</option>
+                        @endforeach
+                        <option value="otra">Otra refacción (escribirla)…</option>
+                    </select>
+
+                    {{-- Selector visual: lista buscable --}}
+                    <div class="campo" style="margin-bottom:.6rem;">
+                        <label>Refacción</label>
+                        <input type="search" id="buscar-refaccion-lista" placeholder="Buscar por nombre o marca…" autocomplete="off" style="margin-bottom:.4rem;">
+                        <div id="lista-refacciones-sel"></div>
+                    </div>
+
                     <div class="rejilla">
-                        <div class="campo">
-                            <label for="refaccion_id">Refacción</label>
-                            <select id="refaccion_id" name="refaccion_id" required data-otro="#refaccion-otra" data-valor-otro="otra">
-                                <option value="">Elige una refacción…</option>
-                                @foreach ($refaccionesCatalogo as $rc)
-                                    <option value="{{ $rc->id }}">{{ $rc->descripcion }} @if ($rc->marca)· {{ $rc->marca }}@endif</option>
-                                @endforeach
-                                <option value="otra">Otra refacción (escribirla)…</option>
-                            </select>
-                        </div>
                         <div class="campo">
                             <label for="ref_cantidad">Cantidad</label>
                             <input type="number" id="ref_cantidad" name="cantidad" step="any" min="0.001" value="1" required>
@@ -797,6 +889,9 @@
 
 @push('scripts')
 <script>
+    // Mapa servicioId → lista de refacciones sugeridas (precargar sin AJAX)
+    const sugeridas = {!! $sugeridasJson !!};
+
     // ── Barra de acciones: un solo panel abierto a la vez ──────────────────────
     const botonesAccion = document.querySelectorAll('.accion-btn[data-panel]');
 
@@ -812,7 +907,8 @@
             if (! yaActivo) {
                 btn.classList.add('activo');
                 panel.hidden = false;
-                panel.querySelector('input, select, textarea')?.focus();
+                Array.from(panel.querySelectorAll('input, select, textarea'))
+                    .find(el => el.offsetParent !== null)?.focus();
                 panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         });
@@ -857,25 +953,169 @@
         actualizar();
     });
 
-    // Al elegir un servicio: avisa si ya está y decide casilla de sugeridas
+    // Al elegir un servicio: avisa si ya está y muestra las refacciones sugeridas con checkboxes
     (function () {
         const servicio = document.getElementById('servicio_id');
         if (! servicio) return;
-        const aviso = document.getElementById('aviso-repetido');
-        const casilla = document.getElementById('casilla-sugeridas');
-        const marcar = casilla.querySelector('input');
+        const aviso   = document.getElementById('aviso-repetido');
+        const seccion = document.getElementById('seccion-sugeridas');
+        const lista   = document.getElementById('lista-sugeridas');
+
+        function renderizarSugeridas(opcion) {
+            const yaEsta  = opcion.hasAttribute('data-ya-esta');
+            const items   = sugeridas[opcion.value] || [];
+
+            seccion.hidden = items.length === 0;
+            lista.innerHTML = '';
+
+            items.forEach(function (r) {
+                const label = document.createElement('label');
+                label.className = 'casilla campo';
+
+                const cb    = document.createElement('input');
+                cb.type     = 'checkbox';
+                cb.name     = 'refacciones_sugeridas[]';
+                cb.value    = r.id;
+                cb.checked  = ! yaEsta;
+
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(
+                    ' ' + r.descripcion + ' · ' + r.cantidad + ' ' + r.unidad.toLowerCase()
+                ));
+                lista.appendChild(label);
+            });
+        }
 
         function actualizar() {
             const opcion = servicio.selectedOptions[0];
-            const yaEsta = opcion.hasAttribute('data-ya-esta');
-            const tieneSugeridas = Number(opcion.dataset.sugeridas || 0) > 0;
-            aviso.hidden = ! yaEsta;
-            casilla.hidden = ! tieneSugeridas;
-            marcar.checked = tieneSugeridas && ! yaEsta;
+            aviso.hidden = ! opcion.hasAttribute('data-ya-esta');
+            renderizarSugeridas(opcion);
         }
 
         servicio.addEventListener('change', actualizar);
         actualizar();
+
+        document.getElementById('btn-marcar-todas')?.addEventListener('click', function () {
+            lista.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);
+        });
+        document.getElementById('btn-desmarcar-todas')?.addEventListener('click', function () {
+            lista.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+        });
+    })();
+
+    // ── Tarjetas de selección de servicio ────────────────────────────────────
+    (function () {
+        const sel    = document.getElementById('servicio_id');
+        const buscar = document.getElementById('buscar-servicio-grilla');
+        if (! sel) return;
+
+        const tarjetas = Array.from(document.querySelectorAll('#tarjetas-servicios .tarj-srv'));
+
+        function seleccionarTarjeta(tarjeta) {
+            tarjetas.forEach(t => t.classList.remove('tarj-sel'));
+            if (tarjeta) tarjeta.classList.add('tarj-sel');
+            sel.value = tarjeta ? tarjeta.dataset.id : '';
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        tarjetas.forEach(function (t) {
+            t.addEventListener('click', function () { seleccionarTarjeta(t); });
+        });
+
+        if (buscar) {
+            buscar.addEventListener('input', function () {
+                const q = buscar.value.toLowerCase();
+                tarjetas.forEach(function (t) {
+                    const nombre = t.querySelector('.tarj-srv-nombre').textContent.toLowerCase();
+                    t.style.display = (! q || nombre.includes(q)) ? '' : 'none';
+                });
+            });
+        }
+
+        // Resetear selección y búsqueda al abrir el panel
+        document.querySelectorAll('.accion-btn[data-panel="panel-trabajo"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (buscar) buscar.value = '';
+                tarjetas.forEach(t => { t.style.display = ''; t.classList.remove('tarj-sel'); });
+                sel.value = '';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                setTimeout(function () { if (buscar) buscar.focus(); }, 60);
+            });
+        });
+    })();
+
+    // ── Lista buscable de refacciones ─────────────────────────────────────────
+    (function () {
+        const sel    = document.getElementById('refaccion_id');
+        const buscar = document.getElementById('buscar-refaccion-lista');
+        const lista  = document.getElementById('lista-refacciones-sel');
+        if (! sel || ! lista) return;
+
+        // Captura las opciones del select nativo
+        const opciones = Array.from(sel.options).map(o => ({ value: o.value, texto: o.textContent.trim() }));
+
+        function renderizar(q) {
+            lista.innerHTML = '';
+            const qLower   = q.toLowerCase();
+            const catálogo = opciones.filter(o => o.value !== '' && o.value !== 'otra');
+            const otra     = opciones.find(o => o.value === 'otra');
+
+            const visibles = q ? catálogo.filter(o => o.texto.toLowerCase().includes(qLower)) : catálogo;
+
+            if (visibles.length === 0) {
+                const p = document.createElement('p');
+                p.className = 'ref-sin-resultado';
+                p.textContent = 'Sin resultados';
+                lista.appendChild(p);
+            } else {
+                visibles.forEach(function (o) {
+                    const div = document.createElement('div');
+                    div.className = 'ref-opcion';
+                    div.dataset.value = o.value;
+                    div.textContent = o.texto;
+                    if (o.value === sel.value) div.classList.add('ref-sel');
+                    div.addEventListener('click', function () {
+                        lista.querySelectorAll('.ref-opcion').forEach(d => d.classList.remove('ref-sel'));
+                        div.classList.add('ref-sel');
+                        sel.value = o.value;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                    lista.appendChild(div);
+                });
+            }
+
+            // "Otra refacción" siempre al final, sin importar el filtro
+            if (otra) {
+                const div = document.createElement('div');
+                div.className = 'ref-opcion ref-opcion-otra';
+                div.dataset.value = otra.value;
+                div.textContent = otra.texto;
+                if (otra.value === sel.value) div.classList.add('ref-sel');
+                div.addEventListener('click', function () {
+                    lista.querySelectorAll('.ref-opcion').forEach(d => d.classList.remove('ref-sel'));
+                    div.classList.add('ref-sel');
+                    sel.value = otra.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                lista.appendChild(div);
+            }
+        }
+
+        if (buscar) {
+            buscar.addEventListener('input', function () { renderizar(buscar.value.trim()); });
+        }
+
+        renderizar('');
+
+        // Resetear al abrir el panel
+        document.querySelectorAll('.accion-btn[data-panel="panel-refaccion"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (buscar) buscar.value = '';
+                renderizar('');
+                sel.value = '';
+                setTimeout(function () { if (buscar) buscar.focus(); }, 60);
+            });
+        });
     })();
 </script>
 @endpush

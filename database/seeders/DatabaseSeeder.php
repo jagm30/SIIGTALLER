@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             ChecklistRecepcionSeeder::class,
             AngulosFotoSeeder::class,
             ZonasVehiculoSeeder::class,
+            CatalogoTallerSeeder::class,
         ]);
 
         if (app()->environment('local', 'testing')) {
